@@ -1,0 +1,6 @@
+{
+  "name": "SIGUWA SMKN 1 Jember - Sistem Informasi Guru Wali",
+  "description": "Aplikasi Terpadu Guru Wali SMK Negeri 1 Jember untuk Layanan Bimbingan, Pembinaan Karakter, Monitoring Kehadiran, Konsultasi, dan Portal Wali Murid Real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
