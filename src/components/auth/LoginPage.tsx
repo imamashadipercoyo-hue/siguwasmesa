@@ -162,7 +162,7 @@ export const LoginPage: React.FC = () => {
                 SIGUWA <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-amber-300">SMKN 1 Jember</span>
               </h1>
               <p className="mt-3 text-sm sm:text-base text-slate-300 font-normal leading-relaxed">
-                Sistem Informasi Terpadu Guru Wali & Pendampingan Karakter Peserta Didik Berbasis Google Sheets Real-time Database.
+                Sistem Informasi Terpadu Guru Wali & Pendampingan Karakter Murid Berbasis Web Based Online.
               </p>
             </div>
 
@@ -176,18 +176,6 @@ export const LoginPage: React.FC = () => {
                   <h4 className="text-xs font-bold text-white">Akses Multi-Peran Terlindungi</h4>
                   <p className="text-[11px] text-slate-400 leading-normal">
                     Mendukung Administrator, Guru Wali Kelas, Koordinator BK, serta Portal Terpadu Orang Tua Siswa.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-400/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <Database className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Database Resmi Kelas X SMKN 1 Jember</h4>
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    Terhubung langsung ke Google Sheets resmi untuk pembaruan jurnal, presensi harian, dan mutasi data karakter.
                   </p>
                 </div>
               </div>

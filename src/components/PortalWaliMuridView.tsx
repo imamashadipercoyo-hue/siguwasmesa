@@ -32,7 +32,8 @@ export const PortalWaliMuridView: React.FC = () => {
     portalLoginError,
     addOrtuFeedbackToJurnal,
     konsultasiList,
-    addKonsultasiWaliMurid
+    addKonsultasiWaliMurid,
+    logout
   } = useApp();
 
   // Login form state
@@ -132,6 +133,17 @@ export const PortalWaliMuridView: React.FC = () => {
                   {s.nama} ({s.kelas})
                 </button>
               ))}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="text-xs text-rose-600 hover:text-rose-700 font-extrabold inline-flex items-center justify-center gap-1.5 cursor-pointer hover:underline"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Keluar ke Halaman Login Utama</span>
+              </button>
             </div>
           </div>
         </div>
@@ -235,14 +247,27 @@ export const PortalWaliMuridView: React.FC = () => {
               </a>
             </div>
 
-            <button
-              onClick={() => setSelectedSiswaForPortal(null)}
-              className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-              title="Keluar / Ganti Siswa"
-            >
-              <LogOut className="w-4 h-4 text-amber-300" />
-              <span>Ganti Siswa</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedSiswaForPortal(null)}
+                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="Ganti Siswa Lain"
+              >
+                <Users className="w-4 h-4 text-amber-300" />
+                <span>Ganti Siswa</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="p-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-sm shadow-rose-900/30 transition-colors"
+                title="Keluar dari Sistem dan Kembali ke Halaman Login"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Keluar</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
