@@ -227,6 +227,7 @@ export function exportAkunToExcel(akunList: UserAccount[], fileName = 'DATA_AKUN
   const data = akunList.map((a, index) => ({
     'No': index + 1,
     'Username': a.username,
+    'Kata Sandi': a.password || (a.role === 'admin' ? 'admin123' : a.role === 'guru_wali' ? 'guru123' : a.role === 'manajemen_bk' ? 'bk123' : '123456'),
     'Nama Pengguna': a.nama,
     'Email': a.email,
     'Role Akses': a.roleLabel,
@@ -240,6 +241,7 @@ export function exportAkunToExcel(akunList: UserAccount[], fileName = 'DATA_AKUN
   worksheet['!cols'] = [
     { wch: 6 },
     { wch: 22 },
+    { wch: 16 },
     { wch: 30 },
     { wch: 35 },
     { wch: 20 },
@@ -383,6 +385,7 @@ export function downloadTemplateAkunExcel() {
   const template = [
     {
       'Username': 'admin.siguwa',
+      'Kata Sandi': 'admin123',
       'Nama Pengguna': 'Administrator Utama SMKN 1 Jember',
       'Email': 'admin.siguwa@smkn1jember.sch.id',
       'Kode Role': 'admin',
@@ -392,6 +395,7 @@ export function downloadTemplateAkunExcel() {
     },
     {
       'Username': 'endang.sulistiyowati',
+      'Kata Sandi': 'guru123',
       'Nama Pengguna': 'Dra. Hj. Endang Sulistiyowati, M.Pd',
       'Email': 'endang.sulistiyowati@smkn1jember.sch.id',
       'Kode Role': 'guru_wali',
@@ -401,6 +405,7 @@ export function downloadTemplateAkunExcel() {
     },
     {
       'Username': '0094201436',
+      'Kata Sandi': '123456',
       'Nama Pengguna': 'Pratama Suwandi (Wali Andika)',
       'Email': 'wali.andika@gmail.com',
       'Kode Role': 'wali_murid',
@@ -444,6 +449,7 @@ export async function parseAkunExcel(file: File): Promise<Partial<UserAccount>[]
           };
 
           const username = getVal(['username', 'user', 'nisn', 'id pengguna']);
+          const password = getVal(['kata sandi', 'password', 'pass', 'sandi']) || 'siguwa123';
           const nama = getVal(['nama pengguna', 'nama', 'name']);
           const email = getVal(['email', 'surel']) || `${username}@smkn1jember.sch.id`;
           
@@ -469,6 +475,7 @@ export async function parseAkunExcel(file: File): Promise<Partial<UserAccount>[]
           return {
             id: `usr-imp-${Date.now()}-${idx}`,
             username,
+            password,
             nama,
             email,
             role,

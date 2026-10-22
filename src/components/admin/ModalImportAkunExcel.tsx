@@ -67,6 +67,7 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
     const formatted: UserAccount[] = parsedRows.map((r, i) => ({
       id: r.id || `usr-imp-${Date.now()}-${i}`,
       username: r.username || `user${i}`,
+      password: r.password || (r.role === 'admin' ? 'admin123' : r.role === 'guru_wali' ? 'guru123' : r.role === 'manajemen_bk' ? 'bk123' : '123456'),
       nama: r.nama || 'Pengguna Baru',
       email: r.email || `${r.username || i}@smkn1jember.sch.id`,
       role: r.role || 'guru_wali',

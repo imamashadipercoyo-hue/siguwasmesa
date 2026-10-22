@@ -36,6 +36,12 @@ interface AppContextType {
   setCurrentGuruWali: (guru: GuruWali) => void;
   guruWaliList: GuruWali[];
   
+  // Authentication & Session
+  currentUser: UserAccount | null;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => { success: boolean; message?: string };
+  logout: () => void;
+
   // Data
   siswaList: Siswa[];
   jurnalList: JurnalLayanan[];
@@ -111,6 +117,7 @@ const STORAGE_KEYS = {
   AKUN: 'siguwa_akun_data',
   GS_CONFIG: 'siguwa_google_sheets_config',
   PORTAL_SISWA: 'siguwa_portal_siswa_id',
+  AUTH_USER: 'siguwa_auth_user',
   DATA_VERSION: 'siguwa_version_flag_v4'
 };
 
@@ -131,6 +138,7 @@ if (typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_KEYS.AKUN);
       localStorage.removeItem(STORAGE_KEYS.GURU_ID);
       localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
+      localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
       localStorage.setItem(STORAGE_KEYS.DATA_VERSION, CURRENT_DATA_VERSION);
     }
   } catch (e) {
@@ -139,8 +147,24 @@ if (typeof window !== 'undefined') {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Current authenticated user session (null when not logged in)
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Gagal membaca sesi user:', e);
+    }
+    return null;
+  });
+
+  const isAuthenticated = Boolean(currentUser);
+
   const [currentRole, setCurrentRoleState] = useState<UserRole>(() => {
-    return (localStorage.getItem(STORAGE_KEYS.ROLE) as UserRole) || 'admin';
+    const saved = localStorage.getItem(STORAGE_KEYS.ROLE) as UserRole;
+    return saved || 'admin';
   });
 
   const [guruWaliList, setGuruWaliList] = useState<GuruWali[]>(() => {
@@ -287,6 +311,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setSelectedSiswaForPortal = (siswa: Siswa | null) => {
     setSelectedSiswaForPortalState(siswa);
     setPortalLoginError(null);
+  };
+
+  // Authentication Methods
+  const login = (username: string, password: string): { success: boolean; message?: string } => {
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    if (!cleanUser || !cleanPass) {
+      return { success: false, message: 'Harap masukkan Username / NISN dan Password.' };
+    }
+
+    // Match by username (case-insensitive) or NISN (digits only comparison for students/wali)
+    const found = akunList.find(a => 
+      a.username.toLowerCase() === cleanUser || 
+      (a.role === 'wali_murid' && a.username.replace(/\D/g, '') === cleanUser.replace(/\D/g, ''))
+    );
+
+    if (!found) {
+      return { success: false, message: 'Akun dengan Username / NISN tersebut tidak terdaftar.' };
+    }
+
+    if (found.status === 'Nonaktif') {
+      return { success: false, message: 'Akun ini dinonaktifkan oleh Administrator. Hubungi pihak sekolah.' };
+    }
+
+    const expectedPassword = found.password || (
+      found.role === 'admin' ? 'admin123' :
+      found.role === 'guru_wali' ? 'guru123' :
+      found.role === 'manajemen_bk' ? 'bk123' : '123456'
+    );
+
+    if (cleanPass !== expectedPassword) {
+      return { success: false, message: 'Password salah. Periksa huruf besar/kecil atau hubungi Admin.' };
+    }
+
+    const nowStr = new Date().toLocaleString('id-ID', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).replace(/\./g, ':');
+
+    const updatedUser: UserAccount = {
+      ...found,
+      lastLogin: nowStr
+    };
+
+    setCurrentUser(updatedUser);
+    localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(updatedUser));
+
+    // Update in akunList
+    setAkunList(prev => prev.map(a => a.id === found.id ? updatedUser : a));
+
+    // Set role
+    setCurrentRoleState(updatedUser.role);
+    localStorage.setItem(STORAGE_KEYS.ROLE, updatedUser.role);
+
+    // If guru_wali, match GuruWali
+    if (updatedUser.role === 'guru_wali' && updatedUser.linkedId) {
+      const matchGW = guruWaliList.find(g => g.id === updatedUser.linkedId);
+      if (matchGW) {
+        setCurrentGuruWaliState(matchGW);
+        localStorage.setItem(STORAGE_KEYS.GURU_ID, matchGW.id);
+      }
+    }
+
+    // If wali_murid, match Siswa
+    if (updatedUser.role === 'wali_murid') {
+      const matchSiswa = siswaList.find(s => s.id === updatedUser.linkedId || s.nisn === updatedUser.username);
+      if (matchSiswa) {
+        setSelectedSiswaForPortalState(matchSiswa);
+        localStorage.setItem(STORAGE_KEYS.PORTAL_SISWA, matchSiswa.id);
+      }
+    }
+
+    return { success: true };
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
+    setSelectedSiswaForPortalState(null);
+    localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
   };
 
   // Google Sheets Handlers
@@ -815,12 +923,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAkunList(INITIAL_AKUN);
     setCurrentGuruWaliState(INITIAL_GURU_WALI[0]);
     setSelectedSiswaForPortalState(INITIAL_SISWA[0]);
+    setCurrentUser(null);
     localStorage.clear();
   };
 
   return (
     <AppContext.Provider
       value={{
+        currentUser,
+        isAuthenticated,
+        login,
+        logout,
         currentRole,
         setCurrentRole,
         currentGuruWali,

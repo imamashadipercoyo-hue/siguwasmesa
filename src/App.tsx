@@ -18,12 +18,18 @@ import { AdminMasterView } from './components/admin/AdminMasterView';
 import { ModalInputJurnal } from './components/ModalInputJurnal';
 import { CetakLaporanModal } from './components/CetakLaporanModal';
 import { LayananType, JurnalLayanan } from './types';
+import { LoginPage } from './components/auth/LoginPage';
 import { GraduationCap, MapPin, Phone, Mail, Globe, Shield } from 'lucide-react';
 
 function MainAppContent() {
-  const { currentRole } = useApp();
+  const { currentRole, isAuthenticated } = useApp();
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // If user is not logged in, enforce initial login screen
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
   
   // Modal Jurnal states
   const [isModalJurnalOpen, setIsModalJurnalOpen] = useState(false);

@@ -113,6 +113,7 @@ export interface KonsultasiWaliMurid {
 export interface UserAccount {
   id: string;
   username: string;
+  password?: string;
   nama: string;
   email: string;
   role: 'admin' | 'guru_wali' | 'manajemen_bk' | 'wali_murid';

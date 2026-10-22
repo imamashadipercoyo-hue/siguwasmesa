@@ -4,6 +4,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-admin-1',
     username: 'admin.siguwa',
+    password: 'admin123',
     nama: 'Administrator Utama SMKN 1 Jember',
     email: 'admin.siguwa@smkn1jember.sch.id',
     role: 'admin',
@@ -15,6 +16,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-gw-1',
     username: 'endang.sulistiyowati',
+    password: 'guru123',
     nama: 'Dra. Hj. Endang Sulistiyowati, M.Pd',
     email: 'endang.sulistiyowati@smkn1jember.sch.id',
     role: 'guru_wali',
@@ -27,6 +29,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-gw-2',
     username: 'ahmad.fauzi',
+    password: 'guru123',
     nama: 'Ahmad Fauzi, S.Kom., M.T',
     email: 'ahmad.fauzi@smkn1jember.sch.id',
     role: 'guru_wali',
@@ -39,6 +42,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-bk-1',
     username: 'sri.wahyuni',
+    password: 'bk123',
     nama: 'Sri Wahyuni, S.E., M.M',
     email: 'sri.wahyuni@smkn1jember.sch.id',
     role: 'manajemen_bk',
@@ -51,6 +55,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-kes-1',
     username: 'bambang.supriyadi',
+    password: 'bk123',
     nama: 'Bambang Supriyadi, S.Pd',
     email: 'bambang.supriyadi@smkn1jember.sch.id',
     role: 'manajemen_bk',
@@ -63,6 +68,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-wali-1',
     username: '0094201436',
+    password: '123456',
     nama: 'Pratama Suwandi (Wali Andika Pratama)',
     email: 'wali.andika@gmail.com',
     role: 'wali_murid',
@@ -75,6 +81,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-wali-2',
     username: '0094672070',
+    password: '123456',
     nama: 'Bambang Wulandari (Wali Anggita Putri)',
     email: 'wali.anggita@gmail.com',
     role: 'wali_murid',
@@ -87,6 +94,7 @@ export const INITIAL_AKUN: UserAccount[] = [
   {
     id: 'usr-wali-3',
     username: '0095992114',
+    password: '123456',
     nama: 'Saputra Hendrawan (Wali Aditia Saputra)',
     email: 'wali.aditia@gmail.com',
     role: 'wali_murid',

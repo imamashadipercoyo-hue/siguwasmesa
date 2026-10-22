@@ -110,6 +110,7 @@ export const AdminMasterView: React.FC = () => {
   const [isAkunFormOpen, setIsAkunFormOpen] = useState(false);
   const [akunFormData, setAkunFormData] = useState<Partial<UserAccount>>({
     username: '',
+    password: '',
     nama: '',
     email: '',
     role: 'guru_wali',
@@ -629,6 +630,7 @@ export const AdminMasterView: React.FC = () => {
                   setEditingAkun(null);
                   setAkunFormData({
                     username: '',
+                    password: 'guru123',
                     nama: '',
                     email: '',
                     role: 'guru_wali',
@@ -652,6 +654,7 @@ export const AdminMasterView: React.FC = () => {
                 <tr>
                   <th className="p-3 w-10 text-center">No</th>
                   <th className="p-3">Username / NISN</th>
+                  <th className="p-3">Kata Sandi</th>
                   <th className="p-3">Nama Pengguna</th>
                   <th className="p-3">Email</th>
                   <th className="p-3">Peran / Role</th>
@@ -665,6 +668,9 @@ export const AdminMasterView: React.FC = () => {
                   <tr key={akun.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="p-3 font-mono font-bold text-slate-900">{akun.username}</td>
+                    <td className="p-3 font-mono text-[11px] font-semibold text-slate-600 bg-slate-50/70 px-2.5 py-1 rounded">
+                      {akun.password || (akun.role === 'admin' ? 'admin123' : akun.role === 'guru_wali' ? 'guru123' : akun.role === 'manajemen_bk' ? 'bk123' : '123456')}
+                    </td>
                     <td className="p-3 font-bold text-slate-800">{akun.nama}</td>
                     <td className="p-3 text-slate-600">{akun.email}</td>
                     <td className="p-3">
@@ -1245,6 +1251,21 @@ export const AdminMasterView: React.FC = () => {
                   onChange={(e) => setAkunFormData({ ...akunFormData, email: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
                 />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Kata Sandi (Password) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: admin123, guru123, 123456"
+                  value={akunFormData.password || ''}
+                  onChange={(e) => setAkunFormData({ ...akunFormData, password: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono font-bold"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Password digunakan pengguna saat awal membuka aplikasi untuk verifikasi login.
+                </span>
               </div>
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
