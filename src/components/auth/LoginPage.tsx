@@ -34,13 +34,12 @@ export const LoginPage: React.FC = () => {
     setErrorMessage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = login(username, password);
-      setIsLoading(false);
-      if (!result.success) {
-        setErrorMessage(result.message || 'Login gagal. Periksa kembali username dan password Anda.');
-      }
-    }, 350);
+    // Instant verification for maximum speed and responsiveness
+    const result = login(username, password);
+    setIsLoading(false);
+    if (!result.success) {
+      setErrorMessage(result.message || 'Login gagal. Periksa kembali username dan password Anda.');
+    }
   };
 
   const handleQuickLogin = (demoUser: string, demoPass: string) => {
@@ -49,13 +48,14 @@ export const LoginPage: React.FC = () => {
     setErrorMessage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      login(demoUser, demoPass);
-      setIsLoading(false);
-    }, 250);
+    const result = login(demoUser, demoPass);
+    setIsLoading(false);
+    if (!result.success) {
+      setErrorMessage(result.message || 'Login gagal.');
+    }
   };
 
-  // Pre-configured demo accounts for convenience
+  // Pre-configured demo accounts for convenience (covering all roles & classes)
   const demoAccounts = [
     {
       role: 'admin',
@@ -99,13 +99,23 @@ export const LoginPage: React.FC = () => {
     },
     {
       role: 'wali_murid',
-      roleLabel: 'Portal Orang Tua / Siswa',
+      roleLabel: 'Wali Murid X KKBT',
       nama: 'Pratama Suwandi (Wali Andika Pratama)',
       username: '0094201436',
       pass: '123456',
       icon: Users,
       badgeColor: 'bg-emerald-600 text-white border-emerald-500',
       desc: 'Pantau Presensi, Nilai Rapor Karakter, dan Konsultasi Online Guru Wali'
+    },
+    {
+      role: 'wali_murid',
+      roleLabel: 'Wali Murid X TL',
+      nama: 'Bambang Wulandari (Wali Anggita Putri)',
+      username: '0094672070',
+      pass: '123456',
+      icon: Users,
+      badgeColor: 'bg-teal-600 text-white border-teal-500',
+      desc: 'Pantau Presensi & Catatan Karakter Kelas X Teknik Logistik'
     }
   ];
 

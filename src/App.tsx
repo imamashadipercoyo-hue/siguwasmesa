@@ -21,16 +21,16 @@ import { LayananType, JurnalLayanan } from './types';
 import { LoginPage } from './components/auth/LoginPage';
 import { GraduationCap, MapPin, Phone, Mail, Globe, Shield } from 'lucide-react';
 
-function MainAppContent() {
-  const { currentRole, isAuthenticated } = useApp();
+function AuthenticatedApp() {
+  const { currentRole, currentUser } = useApp();
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
-  // If user is not logged in, enforce initial login screen
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-  
+  // Ensure activeTab always resets to 'dashboard' on login or role change
+  React.useEffect(() => {
+    setActiveTab('dashboard');
+  }, [currentUser?.id, currentRole]);
+
   // Modal Jurnal states
   const [isModalJurnalOpen, setIsModalJurnalOpen] = useState(false);
   const [modalPrefillType, setModalPrefillType] = useState<LayananType | undefined>(undefined);
@@ -163,6 +163,16 @@ function MainAppContent() {
 
     </div>
   );
+}
+
+function MainAppContent() {
+  const { isAuthenticated } = useApp();
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedApp />;
 }
 
 export default function App() {
