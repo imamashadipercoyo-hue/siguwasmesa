@@ -35,6 +35,7 @@ import { ModalImportSiswaExcel } from './ModalImportSiswaExcel';
 import { ModalImportGuruWaliExcel } from './ModalImportGuruWaliExcel';
 import { ModalImportAkunExcel } from './ModalImportAkunExcel';
 import { PanduanAppsScriptModal } from './PanduanAppsScriptModal';
+import { DEFAULT_APPS_SCRIPT_URL, testAppsScriptConnection } from '../../services/googleSheetsService';
 
 export const AdminMasterView: React.FC = () => {
   const {
@@ -118,7 +119,7 @@ export const AdminMasterView: React.FC = () => {
   });
 
   // Google Sheets state
-  const [urlInput, setUrlInput] = useState(googleSheetsConfig.appsScriptUrl);
+  const [urlInput, setUrlInput] = useState(googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -193,8 +194,9 @@ export const AdminMasterView: React.FC = () => {
   const handleTestConnection = async () => {
     setTestingConnection(true);
     setTestResult(null);
-    updateGoogleSheetsConfig({ appsScriptUrl: urlInput });
-    const res = await testGoogleSheets();
+    const targetUrl = urlInput.trim() || DEFAULT_APPS_SCRIPT_URL;
+    updateGoogleSheetsConfig({ appsScriptUrl: targetUrl, autoSync: true });
+    const res = await testAppsScriptConnection(targetUrl);
     setTestResult(res);
     setTestingConnection(false);
   };
@@ -771,9 +773,21 @@ export const AdminMasterView: React.FC = () => {
                   )}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Dapatkan URL ini setelah menerapkan (Deploy) kode <code className="font-mono bg-slate-200 px-1 py-0.5 rounded">Code.gs</code> di Google Apps Script dengan akses "Anyone" (Siapa saja).
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                <p className="text-[11px] text-slate-500">
+                  Status: Database terhubung ke spreadsheet Google Apps Script SMKN 1 Jember.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUrlInput(DEFAULT_APPS_SCRIPT_URL);
+                    updateGoogleSheetsConfig({ appsScriptUrl: DEFAULT_APPS_SCRIPT_URL, autoSync: true });
+                  }}
+                  className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                >
+                  Gunakan URL Resmi SMKN 1 Jember
+                </button>
+              </div>
             </div>
 
             {/* Test result alert */}

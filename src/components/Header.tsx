@@ -9,7 +9,10 @@ import {
   Building2,
   ChevronDown,
   UserCheck,
-  Shield
+  Shield,
+  Cloud,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -29,7 +32,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
     selectedSiswaForPortal,
     resetToDefaultData,
     konsultasiList,
-    rujukanBKList
+    rujukanBKList,
+    googleSheetsConfig,
+    syncPullFromSheets
   } = useApp();
 
   const pendingKonsultasi = konsultasiList.filter(k => k.status === 'Menunggu Respon').length;
@@ -50,12 +55,44 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
             </span>
           </div>
 
-          <div className="flex items-center gap-3 text-slate-300">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              Sistem Aktif Real-time
-            </span>
-            <span>•</span>
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-slate-300">
+            {/* Google Sheets Realtime Status Indicator */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+              googleSheetsConfig.syncStatus === 'connected'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                : googleSheetsConfig.syncStatus === 'syncing'
+                ? 'bg-blue-500/20 text-blue-300 border-blue-400/40'
+                : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                googleSheetsConfig.syncStatus === 'connected'
+                  ? 'bg-emerald-400 animate-pulse'
+                  : googleSheetsConfig.syncStatus === 'syncing'
+                  ? 'bg-blue-400 animate-ping'
+                  : 'bg-amber-400'
+              }`}></span>
+              <Database className="w-3 h-3" />
+              <span>
+                {googleSheetsConfig.syncStatus === 'connected'
+                  ? 'Google Sheets Real-time'
+                  : googleSheetsConfig.syncStatus === 'syncing'
+                  ? 'Menyinkronkan...'
+                  : 'Offline'}
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await syncPullFromSheets();
+                }}
+                title={`Terakhir sinkron: ${googleSheetsConfig.lastSyncTime || 'Baru saja'}. Klik untuk sinkronisasi paksa.`}
+                className="hover:text-white p-0.5 ml-0.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-2.5 h-2.5 ${googleSheetsConfig.syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            <span className="hidden sm:inline">•</span>
+
             <button
               onClick={() => {
                 if (window.confirm('Reset semua data aplikasi ke kondisi awal demo SMKN 1 Jember?')) {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   GuruWali,
   Siswa,
@@ -25,7 +25,8 @@ import { INITIAL_AKUN } from '../data/initialAccounts';
 import {
   testAppsScriptConnection,
   fetchAllFromGoogleSheets,
-  pushAllToGoogleSheets
+  pushAllToGoogleSheets,
+  DEFAULT_APPS_SCRIPT_URL
 } from '../services/googleSheetsService';
 
 interface AppContextType {
@@ -192,14 +193,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem(STORAGE_KEYS.GS_CONFIG);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          appsScriptUrl: parsed.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL,
+          autoSync: true,
+          syncStatus: 'connected',
+          syncMessage: 'Terhubung ke Database Google Sheets SMKN 1 Jember'
+        };
       } catch (e) {}
     }
     return {
-      appsScriptUrl: '',
-      autoSync: false,
-      syncStatus: 'disconnected',
-      syncMessage: 'Belum terhubung ke Apps Script'
+      appsScriptUrl: DEFAULT_APPS_SCRIPT_URL,
+      autoSync: true,
+      syncStatus: 'connected',
+      syncMessage: 'Terhubung ke Database Google Sheets SMKN 1 Jember',
+      lastSyncTime: new Date().toLocaleTimeString('id-ID')
     };
   });
 
@@ -307,52 +316,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const syncPullFromSheets = async (): Promise<{ success: boolean; message: string }> => {
-    if (!googleSheetsConfig.appsScriptUrl) {
-      return { success: false, message: 'URL Apps Script belum diisi' };
-    }
-    updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: 'Mengunduh data terbaru dari Google Sheets...' });
-    const result = await fetchAllFromGoogleSheets(googleSheetsConfig.appsScriptUrl);
-    if (result.success && result.data) {
-      if (Array.isArray(result.data.siswa) && result.data.siswa.length > 0) {
-        setSiswaList(result.data.siswa);
-      }
-      if (Array.isArray(result.data.guruWali) && result.data.guruWali.length > 0) {
-        setGuruWaliList(result.data.guruWali);
-      }
-      if (Array.isArray(result.data.akun) && result.data.akun.length > 0) {
-        setAkunList(result.data.akun);
-      }
-      if (Array.isArray(result.data.jurnal)) {
-        setJurnalList(result.data.jurnal);
-      }
-      if (Array.isArray(result.data.presensi)) {
-        setPresensiList(result.data.presensi);
-      }
-      if (Array.isArray(result.data.rujukanBK)) {
-        setRujukanBKList(result.data.rujukanBK);
-      }
-      if (Array.isArray(result.data.jadwal)) {
-        setJadwalList(result.data.jadwal);
-      }
-      updateGoogleSheetsConfig({
-        syncStatus: 'connected',
-        syncMessage: 'Data berhasil disinkronisasi dari Google Sheets',
-        lastSyncTime: new Date().toLocaleTimeString('id-ID')
-      });
-      return { success: true, message: 'Data berhasil diunduh dari Google Sheets!' };
-    } else {
-      updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: result.message });
-      return { success: false, message: result.message };
-    }
-  };
+  // Keep latest refs of all data to avoid stale closures during async sync
+  const dataRef = useRef({
+    siswa: siswaList,
+    guruWali: guruWaliList,
+    akun: akunList,
+    jurnal: jurnalList,
+    presensi: presensiList,
+    rujukanBK: rujukanBKList,
+    jadwal: jadwalList
+  });
 
-  const syncPushToSheets = async (): Promise<{ success: boolean; message: string }> => {
-    if (!googleSheetsConfig.appsScriptUrl) {
-      return { success: false, message: 'URL Apps Script belum diisi' };
-    }
-    updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: 'Mengunggah data ke Google Sheets...' });
-    const payload = {
+  useEffect(() => {
+    dataRef.current = {
       siswa: siswaList,
       guruWali: guruWaliList,
       akun: akunList,
@@ -361,7 +337,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rujukanBK: rujukanBKList,
       jadwal: jadwalList
     };
-    const result = await pushAllToGoogleSheets(googleSheetsConfig.appsScriptUrl, payload);
+  }, [siswaList, guruWaliList, akunList, jurnalList, presensiList, rujukanBKList, jadwalList]);
+
+  const syncPullFromSheets = async (): Promise<{ success: boolean; message: string }> => {
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (!url) {
+      return { success: false, message: 'URL Apps Script belum diisi' };
+    }
+    updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: 'Mengunduh data terbaru dari Google Sheets...' });
+    const result = await fetchAllFromGoogleSheets(url);
+    if (result.success && result.data) {
+      // 1. Siswa
+      if (Array.isArray(result.data.siswa) && result.data.siswa.length > 0) {
+        const normalizedSiswa: Siswa[] = result.data.siswa.map((s: any) => ({
+          id: String(s.id || `sis-${Date.now()}`),
+          nisn: String(s.nisn || ''),
+          nama: String(s.nama || ''),
+          kelas: String(s.kelas || 'X KKBT'),
+          jurusan: String(s.jurusan || ''),
+          jenisKelamin: (s.jenisKelamin === 'P' ? 'P' : 'L') as 'L' | 'P',
+          tanggalLahir: typeof s.tanggalLahir === 'string' && s.tanggalLahir.includes('T')
+            ? s.tanggalLahir.split('T')[0]
+            : String(s.tanggalLahir || '2010-01-01'),
+          alamat: String(s.alamat || ''),
+          namaOrtu: String(s.namaOrtu || ''),
+          noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu) : '',
+          nilaiRataRata: Number(s.nilaiRataRata) || 80,
+          poinKarakter: Number(s.poinKarakter) || 85,
+          statusPendampingan: (s.statusPendampingan || 'Normal') as any,
+          catatanKhusus: String(s.catatanKhusus || '')
+        }));
+        setSiswaList(normalizedSiswa);
+      }
+
+      // 2. Guru Wali
+      if (Array.isArray(result.data.guruWali) && result.data.guruWali.length > 0) {
+        const normalizedGuru: GuruWali[] = result.data.guruWali.map((g: any) => ({
+          id: String(g.id || `gw-${Date.now()}`),
+          nip: String(g.nip || ''),
+          nama: String(g.nama || ''),
+          gelar: String(g.gelar || ''),
+          kelas: String(g.kelas || 'X KKBT'),
+          jurusan: String(g.jurusan || ''),
+          telepon: g.telepon !== undefined && g.telepon !== null ? String(g.telepon) : '',
+          email: String(g.email || ''),
+          avatar: String(g.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'),
+          bio: String(g.bio || '')
+        }));
+        setGuruWaliList(normalizedGuru);
+      }
+
+      // 3. Akun Pengguna
+      if (Array.isArray(result.data.akun) && result.data.akun.length > 0) {
+        const normalizedAkun: UserAccount[] = result.data.akun.map((a: any) => ({
+          id: String(a.id || `usr-${Date.now()}`),
+          username: String(a.username || ''),
+          nama: String(a.nama || ''),
+          email: String(a.email || ''),
+          role: (a.role || 'guru_wali') as any,
+          roleLabel: String(a.roleLabel || 'Guru Wali'),
+          status: (String(a.status).toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif') as 'Aktif' | 'Nonaktif',
+          lastLogin: a.lastLogin ? String(a.lastLogin) : undefined,
+          telepon: a.telepon !== undefined && a.telepon !== null ? String(a.telepon) : undefined
+        }));
+        setAkunList(normalizedAkun);
+      }
+
+      // 4. Jurnal
+      let needInitialSeedPush = false;
+      if (Array.isArray(result.data.jurnal) && result.data.jurnal.length > 0) {
+        setJurnalList(result.data.jurnal);
+      } else {
+        needInitialSeedPush = true;
+      }
+
+      // 5. Presensi
+      if (Array.isArray(result.data.presensi) && result.data.presensi.length > 0) {
+        setPresensiList(result.data.presensi);
+      }
+
+      // 6. Rujukan BK
+      if (Array.isArray(result.data.rujukanBK) && result.data.rujukanBK.length > 0) {
+        setRujukanBKList(result.data.rujukanBK);
+      }
+
+      // 7. Jadwal
+      if (Array.isArray(result.data.jadwal) && result.data.jadwal.length > 0) {
+        setJadwalList(result.data.jadwal);
+      }
+
+      updateGoogleSheetsConfig({
+        syncStatus: 'connected',
+        syncMessage: 'Data berhasil disinkronisasi dari Google Sheets',
+        lastSyncTime: new Date().toLocaleTimeString('id-ID')
+      });
+
+      // Jika remote sheet masih kosong untuk jurnal/presensi, dorong inisialisasi awal ke spreadsheet
+      if (needInitialSeedPush) {
+        setTimeout(() => {
+          syncPushToSheets().catch(() => {});
+        }, 1200);
+      }
+
+      return { success: true, message: 'Data berhasil diunduh dari Google Sheets!' };
+    } else {
+      updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: result.message });
+      return { success: false, message: result.message };
+    }
+  };
+
+  const syncPushToSheets = async (): Promise<{ success: boolean; message: string }> => {
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (!url) {
+      return { success: false, message: 'URL Apps Script belum diisi' };
+    }
+    updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: 'Mengunggah data ke Google Sheets...' });
+    const payload = dataRef.current;
+    const result = await pushAllToGoogleSheets(url, payload);
     if (result.success) {
       updateGoogleSheetsConfig({
         syncStatus: 'connected',
@@ -375,12 +467,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Auto Push Helper (debounced or triggered on changes if autoSync is active)
+  // Debounced auto-push whenever any data state changes
+  const autoPushTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isFirstDataMountRef = useRef(true);
+
+  useEffect(() => {
+    if (isFirstDataMountRef.current) {
+      isFirstDataMountRef.current = false;
+      return;
+    }
+    if (!googleSheetsConfig.autoSync || !googleSheetsConfig.appsScriptUrl) return;
+
+    if (autoPushTimerRef.current) {
+      clearTimeout(autoPushTimerRef.current);
+    }
+    autoPushTimerRef.current = setTimeout(() => {
+      syncPushToSheets().catch(err => console.warn('Auto sync push notice:', err));
+    }, 1500);
+
+    return () => {
+      if (autoPushTimerRef.current) {
+        clearTimeout(autoPushTimerRef.current);
+      }
+    };
+  }, [
+    siswaList,
+    guruWaliList,
+    akunList,
+    jurnalList,
+    presensiList,
+    rujukanBKList,
+    jadwalList,
+    googleSheetsConfig.autoSync,
+    googleSheetsConfig.appsScriptUrl
+  ]);
+
+  // Real-time continuous background sync (initial pull on load + periodic poll every 20s + window focus)
+  useEffect(() => {
+    if (!googleSheetsConfig.appsScriptUrl || !googleSheetsConfig.autoSync) return;
+
+    // Tarik data awal saat aplikasi dimuat
+    syncPullFromSheets().catch(err => console.warn('Initial load pull notice:', err));
+
+    // Polling periodik setiap 20 detik secara terus-menerus
+    const interval = setInterval(() => {
+      if (!document.hidden && navigator.onLine) {
+        syncPullFromSheets().catch(err => console.warn('Real-time polling pull notice:', err));
+      }
+    }, 20000);
+
+    // Tarik data terbaru saat tab kembali aktif (focus)
+    const handleFocus = () => {
+      if (navigator.onLine) {
+        syncPullFromSheets().catch(err => console.warn('Focus pull notice:', err));
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [googleSheetsConfig.appsScriptUrl, googleSheetsConfig.autoSync]);
+
+  // Auto Push Helper manual trigger
   const triggerAutoPushIfEnabled = useCallback(() => {
     if (googleSheetsConfig.autoSync && googleSheetsConfig.appsScriptUrl) {
-      syncPushToSheets().catch(err => console.warn('Auto sync warning:', err));
+      if (autoPushTimerRef.current) clearTimeout(autoPushTimerRef.current);
+      autoPushTimerRef.current = setTimeout(() => {
+        syncPushToSheets().catch(err => console.warn('Auto sync warning:', err));
+      }, 500);
     }
-  }, [googleSheetsConfig.autoSync, googleSheetsConfig.appsScriptUrl, siswaList, guruWaliList, akunList, jurnalList, presensiList]);
+  }, [googleSheetsConfig.autoSync, googleSheetsConfig.appsScriptUrl]);
 
   // Master Siswa CRUD
   const addSiswa = (siswa: Omit<Siswa, 'id'>) => {

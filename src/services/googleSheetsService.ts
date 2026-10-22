@@ -3,6 +3,8 @@
  * Menghubungkan SIGUWA secara Real-Time ke Google Sheets via Apps Script Web App
  */
 
+export const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby6PaZIJji6e7dFCMgcxs2a2hnmc5yXPlAqgeSNlfvg6G3Ar_B42qzFQ_f1nux19XzQ/exec';
+
 export interface SyncResult {
   success: boolean;
   message: string;
@@ -86,6 +88,25 @@ export async function fetchAllFromGoogleSheets(url: string): Promise<SyncResult>
       };
     }
   } catch (err: any) {
+    // Attempt fallback POST in case of CORS or redirection issues on GET
+    try {
+      const postResponse = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'getAll' })
+      });
+      const postJson = await postResponse.json();
+      if (postJson.success && postJson.data) {
+        return {
+          success: true,
+          message: 'Data berhasil diunduh dari Google Sheets via POST',
+          data: postJson.data
+        };
+      }
+    } catch (innerErr) {
+      // Ignore innerErr and return main error
+    }
+
     return {
       success: false,
       message: 'Gagal membaca data dari Google Sheets',
