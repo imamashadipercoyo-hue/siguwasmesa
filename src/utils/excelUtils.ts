@@ -229,6 +229,7 @@ export function exportAkunToExcel(akunList: UserAccount[], fileName = 'DATA_AKUN
     'Username': a.username,
     'Kata Sandi': a.password || (a.role === 'admin' ? 'admin123' : a.role === 'guru_wali' ? 'guru123' : a.role === 'manajemen_bk' ? 'bk123' : '123456'),
     'Nama Pengguna': a.nama,
+    'Kelas Diampu': a.kelas || (a.role === 'guru_wali' ? 'X KKBT' : a.role === 'admin' ? 'Semua Kelas' : '-'),
     'Email': a.email,
     'Role Akses': a.roleLabel,
     'Kode Role': a.role,
@@ -243,6 +244,7 @@ export function exportAkunToExcel(akunList: UserAccount[], fileName = 'DATA_AKUN
     { wch: 22 },
     { wch: 16 },
     { wch: 30 },
+    { wch: 18 }, // Kelas Diampu
     { wch: 35 },
     { wch: 20 },
     { wch: 16 },
@@ -387,6 +389,7 @@ export function downloadTemplateAkunExcel() {
       'Username': 'admin.siguwa',
       'Kata Sandi': 'admin123',
       'Nama Pengguna': 'Administrator Utama SMKN 1 Jember',
+      'Kelas Diampu': 'Semua Kelas',
       'Email': 'admin.siguwa@smkn1jember.sch.id',
       'Kode Role': 'admin',
       'Role Akses': 'Super Administrator',
@@ -397,6 +400,7 @@ export function downloadTemplateAkunExcel() {
       'Username': 'endang.sulistiyowati',
       'Kata Sandi': 'guru123',
       'Nama Pengguna': 'Dra. Hj. Endang Sulistiyowati, M.Pd',
+      'Kelas Diampu': 'X KKBT',
       'Email': 'endang.sulistiyowati@smkn1jember.sch.id',
       'Kode Role': 'guru_wali',
       'Role Akses': 'Guru Wali Kelas X KKBT',
@@ -404,9 +408,32 @@ export function downloadTemplateAkunExcel() {
       'Kontak Telepon': '081234567890'
     },
     {
+      'Username': 'ahmad.fauzi',
+      'Kata Sandi': 'guru123',
+      'Nama Pengguna': 'Ahmad Fauzi, S.Kom., M.T',
+      'Kelas Diampu': 'X TL',
+      'Email': 'ahmad.fauzi@smkn1jember.sch.id',
+      'Kode Role': 'guru_wali',
+      'Role Akses': 'Guru Wali Kelas X TL',
+      'Status Akun': 'Aktif',
+      'Kontak Telepon': '081398765432'
+    },
+    {
+      'Username': 'sri.wahyuni',
+      'Kata Sandi': 'bk123',
+      'Nama Pengguna': 'Sri Wahyuni, S.E., M.M',
+      'Kelas Diampu': 'Semua Kelas X',
+      'Email': 'sri.wahyuni@smkn1jember.sch.id',
+      'Kode Role': 'manajemen_bk',
+      'Role Akses': 'Koordinator BK & Kesiswaan',
+      'Status Akun': 'Aktif',
+      'Kontak Telepon': '081567891234'
+    },
+    {
       'Username': '0094201436',
       'Kata Sandi': '123456',
       'Nama Pengguna': 'Pratama Suwandi (Wali Andika)',
+      'Kelas Diampu': 'X KKBT',
       'Email': 'wali.andika@gmail.com',
       'Kode Role': 'wali_murid',
       'Role Akses': 'Wali Murid X KKBT',
@@ -416,6 +443,17 @@ export function downloadTemplateAkunExcel() {
   ];
 
   const worksheet = XLSX.utils.json_to_sheet(template);
+  worksheet['!cols'] = [
+    { wch: 22 },
+    { wch: 14 },
+    { wch: 32 },
+    { wch: 18 }, // Kelas Diampu
+    { wch: 35 },
+    { wch: 16 },
+    { wch: 26 },
+    { wch: 14 },
+    { wch: 18 }
+  ];
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Akun');
   XLSX.writeFile(workbook, 'TEMPLATE_IMPORT_AKUN_SMKN1_JEMBER.xlsx');
@@ -451,6 +489,7 @@ export async function parseAkunExcel(file: File): Promise<Partial<UserAccount>[]
           const username = getVal(['username', 'user', 'nisn', 'id pengguna']);
           const password = getVal(['kata sandi', 'password', 'pass', 'sandi']) || 'siguwa123';
           const nama = getVal(['nama pengguna', 'nama', 'name']);
+          const kelas = getVal(['kelas diampu', 'kelas', 'wali kelas', 'kelas binaan', 'mengampu kelas', 'rombel']);
           const email = getVal(['email', 'surel']) || `${username}@smkn1jember.sch.id`;
           
           let roleRaw = getVal(['kode role', 'role', 'peran']).toLowerCase();
@@ -467,7 +506,10 @@ export async function parseAkunExcel(file: File): Promise<Partial<UserAccount>[]
             wali_murid: 'Wali Murid'
           };
 
-          const roleLabel = getVal(['role akses', 'label role', 'peran akses']) || roleLabelMap[role];
+          const defaultKelas = role === 'admin' ? 'Semua Kelas' : role === 'guru_wali' ? (kelas || 'X KKBT') : role === 'manajemen_bk' ? 'Semua Kelas X' : (kelas || 'X KKBT');
+          const roleLabel = getVal(['role akses', 'label role', 'peran akses']) || (
+            role === 'guru_wali' && kelas ? `Guru Wali Kelas ${kelas}` : roleLabelMap[role]
+          );
           const statusRaw = getVal(['status akun', 'status']).toLowerCase();
           const status: 'Aktif' | 'Nonaktif' = statusRaw.includes('non') ? 'Nonaktif' : 'Aktif';
           const telepon = getVal(['kontak telepon', 'telepon', 'no hp', 'hp', 'wa']);
@@ -480,6 +522,7 @@ export async function parseAkunExcel(file: File): Promise<Partial<UserAccount>[]
             email,
             role,
             roleLabel,
+            kelas: kelas || defaultKelas,
             status,
             telepon,
             lastLogin: 'Baru diimpor'

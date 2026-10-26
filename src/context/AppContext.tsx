@@ -471,7 +471,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 4. Role-specific context bindings
     if (updatedUser.role === 'guru_wali') {
-      const matchGW = guruWaliList.find(g => g.id === updatedUser.linkedId || g.email.toLowerCase() === updatedUser.email.toLowerCase());
+      const matchGW = guruWaliList.find(g => 
+        g.id === updatedUser.linkedId || 
+        g.email.toLowerCase() === updatedUser.email.toLowerCase() ||
+        (updatedUser.kelas && g.kelas.toLowerCase() === updatedUser.kelas.toLowerCase())
+      );
       if (matchGW) {
         setCurrentGuruWaliState(matchGW);
         localStorage.setItem(STORAGE_KEYS.GURU_ID, matchGW.id);

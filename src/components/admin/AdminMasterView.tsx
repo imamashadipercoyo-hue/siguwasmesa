@@ -115,9 +115,12 @@ export const AdminMasterView: React.FC = () => {
     email: '',
     role: 'guru_wali',
     roleLabel: 'Guru Wali',
+    kelas: 'X KKBT',
     status: 'Aktif',
     telepon: ''
   });
+  const [akunSearchQuery, setAkunSearchQuery] = useState('');
+  const [akunKelasFilter, setAkunKelasFilter] = useState('all');
 
   // Google Sheets state
   const [urlInput, setUrlInput] = useState(googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL);
@@ -182,10 +185,31 @@ export const AdminMasterView: React.FC = () => {
       return;
     }
 
+    const assignedKelas = akunFormData.kelas || (
+      akunFormData.role === 'admin' ? 'Semua Kelas' :
+      akunFormData.role === 'guru_wali' ? 'X KKBT' :
+      akunFormData.role === 'manajemen_bk' ? 'Semua Kelas X' : '-'
+    );
+
+    let linkedId = akunFormData.linkedId;
+    if (akunFormData.role === 'guru_wali' && !linkedId) {
+      const matchGW = guruWaliList.find(g => 
+        g.kelas === assignedKelas || 
+        g.nama.toLowerCase().includes((akunFormData.nama || '').toLowerCase())
+      );
+      if (matchGW) linkedId = matchGW.id;
+    }
+
+    const payload: Partial<UserAccount> = {
+      ...akunFormData,
+      kelas: assignedKelas,
+      linkedId
+    };
+
     if (editingAkun) {
-      updateAkun(editingAkun.id, akunFormData);
+      updateAkun(editingAkun.id, payload);
     } else {
-      addAkun(akunFormData as Omit<UserAccount, 'id'>);
+      addAkun(payload as Omit<UserAccount, 'id'>);
     }
     setIsAkunFormOpen(false);
     setEditingAkun(null);
@@ -603,7 +627,7 @@ export const AdminMasterView: React.FC = () => {
                 Master Data Akun Pengguna ({akunList.length} Akun Terdaftar)
               </h3>
               <p className="text-xs text-slate-500">
-                Kelola hak akses Admin, Guru Wali, Guru BK / Kesiswaan, dan Wali Murid.
+                Kelola hak akses Admin, Guru Wali pengampu kelas, Guru BK / Kesiswaan, dan Wali Murid.
               </p>
             </div>
 
@@ -635,16 +659,45 @@ export const AdminMasterView: React.FC = () => {
                     email: '',
                     role: 'guru_wali',
                     roleLabel: 'Guru Wali',
+                    kelas: 'X KKBT',
                     status: 'Aktif',
                     telepon: ''
                   });
                   setIsAkunFormOpen(true);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Akun Baru</span>
               </button>
+            </div>
+          </div>
+
+          {/* Search & Filter Akun Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+            <div className="relative flex-1 w-full">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Cari username, nama pengguna, kelas diampu, atau email..."
+                value={akunSearchQuery}
+                onChange={(e) => setAkunSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-blue-600 font-medium"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Filter Kelas:</span>
+              <select
+                value={akunKelasFilter}
+                onChange={(e) => setAkunKelasFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:outline-blue-600"
+              >
+                <option value="all">Semua Kelas</option>
+                {uniqueClasses.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -656,6 +709,7 @@ export const AdminMasterView: React.FC = () => {
                   <th className="p-3">Username / NISN</th>
                   <th className="p-3">Kata Sandi</th>
                   <th className="p-3">Nama Pengguna</th>
+                  <th className="p-3">Kelas Diampu</th>
                   <th className="p-3">Email</th>
                   <th className="p-3">Peran / Role</th>
                   <th className="p-3 text-center">Status</th>
@@ -664,7 +718,21 @@ export const AdminMasterView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {akunList.map((akun, idx) => (
+                {akunList
+                  .filter(akun => {
+                    if (akunKelasFilter !== 'all' && (akun.kelas || '') !== akunKelasFilter) return false;
+                    if (akunSearchQuery.trim()) {
+                      const q = akunSearchQuery.toLowerCase();
+                      const mUser = akun.username.toLowerCase().includes(q);
+                      const mName = akun.nama.toLowerCase().includes(q);
+                      const mEmail = akun.email.toLowerCase().includes(q);
+                      const mKelas = (akun.kelas || '').toLowerCase().includes(q);
+                      const mRole = akun.roleLabel.toLowerCase().includes(q);
+                      if (!mUser && !mName && !mEmail && !mKelas && !mRole) return false;
+                    }
+                    return true;
+                  })
+                  .map((akun, idx) => (
                   <tr key={akun.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="p-3 font-mono font-bold text-slate-900">{akun.username}</td>
@@ -672,6 +740,22 @@ export const AdminMasterView: React.FC = () => {
                       {akun.password || (akun.role === 'admin' ? 'admin123' : akun.role === 'guru_wali' ? 'guru123' : akun.role === 'manajemen_bk' ? 'bk123' : '123456')}
                     </td>
                     <td className="p-3 font-bold text-slate-800">{akun.nama}</td>
+                    <td className="p-3">
+                      {akun.role === 'guru_wali' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 font-extrabold text-xs shadow-2xs">
+                          <GraduationCap className="w-3.5 h-3.5 text-blue-700" />
+                          <span>{akun.kelas || 'X KKBT'}</span>
+                        </span>
+                      ) : akun.role === 'wali_murid' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs">
+                          <span>{akun.kelas || '-'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 font-semibold text-xs">
+                          {akun.kelas || (akun.role === 'admin' ? 'Semua Kelas' : 'Semua Kelas X')}
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3 text-slate-600">{akun.email}</td>
                     <td className="p-3">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
@@ -700,6 +784,7 @@ export const AdminMasterView: React.FC = () => {
                             setIsAkunFormOpen(true);
                           }}
                           className="p-1.5 text-slate-600 hover:text-blue-700 rounded-lg cursor-pointer"
+                          title="Ubah Akun"
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
@@ -710,6 +795,7 @@ export const AdminMasterView: React.FC = () => {
                             }
                           }}
                           className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                          title="Hapus Akun"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1184,6 +1270,41 @@ export const AdminMasterView: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveAkun} className="p-5 space-y-3 text-xs">
+              {/* Quick Fill Guru Wali if role is guru_wali and creating new account */}
+              {!editingAkun && akunFormData.role === 'guru_wali' && (
+                <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-1">
+                  <label className="font-bold text-blue-900 block text-[11px]">
+                    ✨ Hubungkan dengan Guru Wali Terdaftar (Auto-Fill)
+                  </label>
+                  <select
+                    onChange={(e) => {
+                      const selectedGuru = guruWaliList.find(g => g.id === e.target.value);
+                      if (selectedGuru) {
+                        setAkunFormData({
+                          ...akunFormData,
+                          nama: `${selectedGuru.nama}, ${selectedGuru.gelar}`,
+                          email: selectedGuru.email,
+                          telepon: selectedGuru.telepon,
+                          kelas: selectedGuru.kelas,
+                          linkedId: selectedGuru.id,
+                          username: selectedGuru.email.split('@')[0] || akunFormData.username,
+                          roleLabel: `Guru Wali Kelas ${selectedGuru.kelas}`
+                        });
+                      }
+                    }}
+                    defaultValue=""
+                    className="w-full bg-white border border-blue-200 text-blue-900 font-semibold rounded-lg p-2 text-xs cursor-pointer focus:outline-blue-600"
+                  >
+                    <option value="">-- Pilih Guru Wali untuk Isi Otomatis --</option>
+                    {guruWaliList.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.nama}, {g.gelar} — Wali Kelas {g.kelas}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Username / NISN *</label>
                 <input
@@ -1191,7 +1312,8 @@ export const AdminMasterView: React.FC = () => {
                   required
                   value={akunFormData.username}
                   onChange={(e) => setAkunFormData({ ...akunFormData, username: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono"
+                  placeholder="Contoh: endang.sulistiyowati atau 0094201436"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono font-bold"
                 />
               </div>
 
@@ -1202,6 +1324,7 @@ export const AdminMasterView: React.FC = () => {
                   required
                   value={akunFormData.nama}
                   onChange={(e) => setAkunFormData({ ...akunFormData, nama: e.target.value })}
+                  placeholder="Nama Lengkap Beserta Gelar"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
                 />
               </div>
@@ -1219,7 +1342,13 @@ export const AdminMasterView: React.FC = () => {
                         manajemen_bk: 'BK & Kesiswaan',
                         wali_murid: 'Wali Murid'
                       };
-                      setAkunFormData({ ...akunFormData, role: r, roleLabel: labelMap[r] });
+                      const defaultK = r === 'admin' ? 'Semua Kelas' : r === 'guru_wali' ? 'X KKBT' : r === 'manajemen_bk' ? 'Semua Kelas X' : 'X KKBT';
+                      setAkunFormData({
+                        ...akunFormData,
+                        role: r,
+                        roleLabel: labelMap[r],
+                        kelas: akunFormData.kelas || defaultK
+                      });
                     }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
                   >
@@ -1243,12 +1372,60 @@ export const AdminMasterView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Kelas yang Diampu Section */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    {akunFormData.role === 'guru_wali' ? 'Kelas yang Diampu *' :
+                     akunFormData.role === 'wali_murid' ? 'Kelas Siswa (Binaan)' : 'Lingkup Kelas'}
+                  </label>
+                  {akunFormData.role === 'guru_wali' ? (
+                    <select
+                      value={akunFormData.kelas || 'X KKBT'}
+                      onChange={(e) => {
+                        const newK = e.target.value;
+                        setAkunFormData({
+                          ...akunFormData,
+                          kelas: newK,
+                          roleLabel: `Guru Wali Kelas ${newK}`
+                        });
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold text-blue-900"
+                    >
+                      {uniqueClasses.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={akunFormData.kelas || (akunFormData.role === 'admin' ? 'Semua Kelas' : 'Semua Kelas X')}
+                      onChange={(e) => setAkunFormData({ ...akunFormData, kelas: e.target.value })}
+                      placeholder="Contoh: X KKBT atau Semua Kelas"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Kontak Telepon / WA</label>
+                  <input
+                    type="text"
+                    value={akunFormData.telepon || ''}
+                    onChange={(e) => setAkunFormData({ ...akunFormData, telepon: e.target.value })}
+                    placeholder="081234567890"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Email</label>
                 <input
                   type="email"
                   value={akunFormData.email}
                   onChange={(e) => setAkunFormData({ ...akunFormData, email: e.target.value })}
+                  placeholder="nama@smkn1jember.sch.id"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
                 />
               </div>

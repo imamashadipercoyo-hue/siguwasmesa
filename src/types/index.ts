@@ -118,6 +118,7 @@ export interface UserAccount {
   email: string;
   role: 'admin' | 'guru_wali' | 'manajemen_bk' | 'wali_murid';
   roleLabel: string;
+  kelas?: string; // Kelas yang diampu guru wali (misal: 'X KKBT', 'X TL') atau kelas siswa
   status: 'Aktif' | 'Nonaktif';
   lastLogin?: string;
   linkedId?: string; // id GuruWali atau id Siswa

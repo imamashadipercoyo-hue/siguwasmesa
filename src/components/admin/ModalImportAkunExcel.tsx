@@ -69,6 +69,7 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
       username: r.username || `user${i}`,
       password: r.password || (r.role === 'admin' ? 'admin123' : r.role === 'guru_wali' ? 'guru123' : r.role === 'manajemen_bk' ? 'bk123' : '123456'),
       nama: r.nama || 'Pengguna Baru',
+      kelas: r.kelas || (r.role === 'admin' ? 'Semua Kelas' : r.role === 'guru_wali' ? 'X KKBT' : '-'),
       email: r.email || `${r.username || i}@smkn1jember.sch.id`,
       role: r.role || 'guru_wali',
       roleLabel: r.roleLabel || 'Guru Wali',
@@ -115,7 +116,7 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
           <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-purple-900">
               <KeyRound className="w-4 h-4 text-purple-700 shrink-0" />
-              <span>Format kolom: Username, Nama Pengguna, Email, Kode Role, Role Akses, Status Akun, Kontak Telepon</span>
+              <span>Format kolom: Username, Kata Sandi, Nama Pengguna, <strong>Kelas Diampu</strong>, Email, Kode Role, Role Akses, Status Akun, Kontak Telepon</span>
             </div>
             <button
               onClick={downloadTemplateAkunExcel}
@@ -184,6 +185,7 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
                     <tr>
                       <th className="p-2">Username</th>
                       <th className="p-2">Nama Pengguna</th>
+                      <th className="p-2">Kelas Diampu</th>
                       <th className="p-2">Email</th>
                       <th className="p-2">Peran Akses</th>
                       <th className="p-2">Status</th>
@@ -195,6 +197,11 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
                       <tr key={idx} className="hover:bg-slate-50">
                         <td className="p-2 font-mono font-bold text-slate-800">{row.username}</td>
                         <td className="p-2 font-bold text-slate-900">{row.nama}</td>
+                        <td className="p-2 font-bold text-blue-700">
+                          <span className="px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 font-bold text-[10px]">
+                            {row.kelas || '-'}
+                          </span>
+                        </td>
                         <td className="p-2 text-slate-600">{row.email}</td>
                         <td className="p-2">
                           <span className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-[10px] font-bold">
