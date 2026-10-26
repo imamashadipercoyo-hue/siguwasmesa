@@ -28,6 +28,7 @@ import {
   pushAllToGoogleSheets,
   DEFAULT_APPS_SCRIPT_URL
 } from '../services/googleSheetsService';
+import { deduplicateAccounts } from '../utils/accountUtils';
 
 interface AppContextType {
   currentRole: UserRole;
@@ -211,10 +212,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_KONSULTASI_WALI_MURID;
   });
 
-  const [akunList, setAkunList] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.AKUN);
-    return saved ? JSON.parse(saved) : INITIAL_AKUN;
+  const [akunList, setAkunListState] = useState<UserAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.AKUN);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return deduplicateAccounts(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal membaca akun:', e);
+    }
+    return deduplicateAccounts(INITIAL_AKUN);
   });
+
+  const setAkunList = useCallback((action: React.SetStateAction<UserAccount[]>) => {
+    setAkunListState(prev => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      return deduplicateAccounts(next);
+    });
+  }, []);
 
   const [googleSheetsConfig, setGoogleSheetsConfig] = useState<GoogleSheetsConfig>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.GS_CONFIG);
@@ -564,9 +582,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (result.success && result.data) {
       // 1. Siswa
       if (Array.isArray(result.data.siswa) && result.data.siswa.length > 0) {
-        const normalizedSiswa: Siswa[] = result.data.siswa.map((s: any) => ({
-          id: String(s.id || `sis-${Date.now()}`),
-          nisn: String(s.nisn || ''),
+        const normalizedSiswa: Siswa[] = result.data.siswa.map((s: any, idx: number) => ({
+          id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
+          nisn: String(s.nisn || '').replace(/^'/, ''),
           nama: String(s.nama || ''),
           kelas: String(s.kelas || 'X KKBT'),
           jurusan: String(s.jurusan || ''),
@@ -576,7 +594,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : String(s.tanggalLahir || '2010-01-01'),
           alamat: String(s.alamat || ''),
           namaOrtu: String(s.namaOrtu || ''),
-          noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu) : '',
+          noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu).replace(/^'/, '') : '',
           nilaiRataRata: Number(s.nilaiRataRata) || 80,
           poinKarakter: Number(s.poinKarakter) || 85,
           statusPendampingan: (s.statusPendampingan || 'Normal') as any,
@@ -587,14 +605,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Guru Wali
       if (Array.isArray(result.data.guruWali) && result.data.guruWali.length > 0) {
-        const normalizedGuru: GuruWali[] = result.data.guruWali.map((g: any) => ({
-          id: String(g.id || `gw-${Date.now()}`),
-          nip: String(g.nip || ''),
+        const normalizedGuru: GuruWali[] = result.data.guruWali.map((g: any, idx: number) => ({
+          id: String(g.id && String(g.id).trim() ? g.id : `gw-${Date.now()}-${idx}`),
+          nip: String(g.nip || '').replace(/^'/, ''),
           nama: String(g.nama || ''),
           gelar: String(g.gelar || ''),
           kelas: String(g.kelas || 'X KKBT'),
           jurusan: String(g.jurusan || ''),
-          telepon: g.telepon !== undefined && g.telepon !== null ? String(g.telepon) : '',
+          telepon: g.telepon !== undefined && g.telepon !== null ? String(g.telepon).replace(/^'/, '') : '',
           email: String(g.email || ''),
           avatar: String(g.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'),
           bio: String(g.bio || '')
@@ -604,18 +622,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 3. Akun Pengguna
       if (Array.isArray(result.data.akun) && result.data.akun.length > 0) {
-        const normalizedAkun: UserAccount[] = result.data.akun.map((a: any) => ({
-          id: String(a.id || `usr-${Date.now()}`),
-          username: String(a.username || ''),
+        const normalizedAkun: UserAccount[] = result.data.akun.map((a: any, idx: number) => ({
+          id: String(a.id && String(a.id).trim() ? a.id : `usr-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`),
+          username: String(a.username || `user-${idx}`).replace(/^'/, '').trim(),
+          password: a.password ? String(a.password) : undefined,
           nama: String(a.nama || ''),
+          kelas: a.kelas ? String(a.kelas) : undefined,
           email: String(a.email || ''),
           role: (a.role || 'guru_wali') as any,
           roleLabel: String(a.roleLabel || 'Guru Wali'),
           status: (String(a.status).toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif') as 'Aktif' | 'Nonaktif',
           lastLogin: a.lastLogin ? String(a.lastLogin) : undefined,
-          telepon: a.telepon !== undefined && a.telepon !== null ? String(a.telepon) : undefined
+          telepon: a.telepon !== undefined && a.telepon !== null ? String(a.telepon).replace(/^'/, '') : undefined,
+          linkedId: a.linkedId ? String(a.linkedId) : undefined
         }));
-        setAkunList(normalizedAkun);
+        setAkunList(deduplicateAccounts(normalizedAkun));
       }
 
       // 4. Jurnal

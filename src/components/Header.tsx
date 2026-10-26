@@ -120,8 +120,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
           
           {/* Logo & Application Title */}
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-800 text-white flex items-center justify-center shadow-md shadow-blue-900/20 ring-2 ring-blue-600/30">
-              <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 text-amber-300" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm p-1 border border-slate-200 shrink-0">
+              <img src="https://iili.io/nkO9grN.md.png" alt="SMKN 1 Jember" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-2">

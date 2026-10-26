@@ -84,30 +84,44 @@ export const CetakLaporanModal: React.FC<CetakLaporanModalProps> = ({ isOpen, on
           
           {/* Official Kop Surat SMKN 1 Jember */}
           <div className="border-b-4 border-double border-slate-900 pb-3 text-center mb-6">
-            <div className="flex items-center justify-between">
-              {/* Logo / Badge */}
-              <div className="w-16 h-16 rounded-full border-2 border-slate-900 flex items-center justify-center font-bold text-base bg-blue-50">
-                SMK
+            <div className="flex items-center justify-between gap-3 sm:gap-4">
+              {/* Logo Resmi Provinsi Jawa Timur */}
+              <div className="w-16 sm:w-20 shrink-0 flex items-center justify-center">
+                <img
+                  src="https://iili.io/nkNmwes.png"
+                  alt="Logo Provinsi Jawa Timur"
+                  className="w-14 h-18 sm:w-16 sm:h-20 object-contain"
+                />
               </div>
-              <div className="flex-1 px-4">
-                <h4 className="text-xs uppercase tracking-widest font-sans font-bold text-slate-700">
+
+              <div className="flex-1 px-1 sm:px-3 text-center">
+                <h4 className="text-xs sm:text-sm uppercase tracking-widest font-sans font-bold text-slate-800">
                   PEMERINTAH PROVINSI JAWA TIMUR
                 </h4>
-                <h4 className="text-xs uppercase tracking-widest font-sans font-bold text-slate-700">
-                  DINAS PENDIDIKAN • CABANG DINAS WILAYAH JEMBER
+                <h4 className="text-xs sm:text-sm uppercase tracking-widest font-sans font-bold text-slate-800">
+                  DINAS PENDIDIKAN
                 </h4>
-                <h2 className="text-lg sm:text-xl font-sans font-black tracking-tight text-slate-950 uppercase mt-0.5">
+                <h5 className="text-[10px] sm:text-xs uppercase tracking-wider font-sans font-bold text-slate-700">
+                  CABANG DINAS PENDIDIKAN WILAYAH JEMBER
+                </h5>
+                <h2 className="text-base sm:text-xl font-sans font-black tracking-tight text-slate-950 uppercase mt-0.5">
                   SEKOLAH MENENGAH KEJURUAN NEGERI 1 JEMBER
                 </h2>
-                <p className="text-[11px] font-sans text-slate-600">
+                <p className="text-[10px] sm:text-[11px] font-sans text-slate-600">
                   Jalan Jambu No. 17 Telp. (0331) 487535 Fax. (0331) 487535 Patrang - Jember 68118
                 </p>
-                <p className="text-[10px] font-sans text-slate-500">
+                <p className="text-[9px] sm:text-[10px] font-sans text-slate-500">
                   Website: www.smkn1jember.sch.id • Email: info@smkn1jember.sch.id
                 </p>
               </div>
-              <div className="w-16 h-16 rounded-full border-2 border-slate-900 flex items-center justify-center font-bold text-base bg-amber-50">
-                JBR
+
+              {/* Logo Resmi SMKN 1 Jember */}
+              <div className="w-16 sm:w-20 shrink-0 flex items-center justify-center">
+                <img
+                  src="https://iili.io/nkO9grN.md.png"
+                  alt="Logo SMKN 1 Jember"
+                  className="w-14 h-18 sm:w-16 sm:h-20 object-contain"
+                />
               </div>
             </div>
           </div>

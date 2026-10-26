@@ -99,7 +99,7 @@ export const PanduanAppsScriptModal: React.FC<PanduanAppsScriptModalProps> = ({
                     Keuntungan Backend Google Sheets untuk SMKN 1 Jember:
                   </h4>
                   <p className="text-emerald-800 mt-1">
-                    Gratis selamanya, tanpa biaya server bulanan, data tersimpan langsung di Google Drive akun sekolah, dan otomatis membuat tabel <strong>Siswa, GuruWali, Akun, Jurnal, Presensi, RujukanBK, Jadwal</strong> secara otomatis!
+                    Gratis selamanya, tanpa biaya server bulanan, data tersimpan langsung di Google Drive akun sekolah, dan otomatis membuat tabel <strong>Siswa, GuruWali, Akun, Jurnal, Presensi, RujukanBK, Jadwal</strong>. Tabel <strong>Akun</strong> otomatis sinkron dengan kolom resmi: <em>No, Username / NISN, Kata Sandi, Nama Pengguna, Kelas Diampu, Email, Peran / Role, Status, Terakhir Masuk</em>!
                   </p>
                 </div>
               </div>

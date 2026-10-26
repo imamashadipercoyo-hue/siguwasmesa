@@ -436,7 +436,7 @@ export const AdminMasterView: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
                 {filteredSiswa.map((siswa, idx) => (
-                  <tr key={siswa.id} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={`${siswa.id}-${siswa.nisn}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="p-3 font-mono font-bold text-slate-800">{siswa.nisn}</td>
                     <td className="p-3 font-bold text-slate-900">{siswa.nama}</td>
@@ -555,9 +555,9 @@ export const AdminMasterView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {guruWaliList.map(guru => (
+            {guruWaliList.map((guru, idx) => (
               <div
-                key={guru.id}
+                key={`${guru.id}-${guru.nip}-${idx}`}
                 className="p-4 rounded-2xl border border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-white shadow-xs transition-all space-y-3"
               >
                 <div className="flex items-start gap-3">
@@ -733,7 +733,7 @@ export const AdminMasterView: React.FC = () => {
                     return true;
                   })
                   .map((akun, idx) => (
-                  <tr key={akun.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={`${akun.id}-${akun.username}-${idx}`} className="hover:bg-slate-50 transition-colors">
                     <td className="p-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="p-3 font-mono font-bold text-slate-900">{akun.username}</td>
                     <td className="p-3 font-mono text-[11px] font-semibold text-slate-600 bg-slate-50/70 px-2.5 py-1 rounded">
