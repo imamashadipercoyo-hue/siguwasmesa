@@ -64,18 +64,30 @@ export const ModalImportGuruWaliExcel: React.FC<ModalImportGuruWaliExcelProps> =
 
   const handleConfirm = () => {
     if (parsedRows.length === 0) return;
-    const formatted: GuruWali[] = parsedRows.map((r, i) => ({
-      id: r.id || `gw-imp-${Date.now()}-${i}`,
-      nip: r.nip || `19850101${Date.now() + i}`,
-      nama: r.nama || 'Guru Wali',
-      gelar: r.gelar || 'S.Pd',
-      kelas: r.kelas || 'X KKBT',
-      jurusan: r.jurusan || 'Kriya Kreatif Batik dan Tekstil',
-      telepon: r.telepon || '081234567890',
-      email: r.email || `guru.${i}@smkn1jember.sch.id`,
-      bio: r.bio || `Guru Wali Kelas ${r.kelas || 'X'} SMKN 1 Jember.`,
-      avatar: r.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
-    }));
+    const formatted: GuruWali[] = parsedRows.map((r, i) => {
+      const rawRole = (r.role || 'guru_wali') as any;
+      const role = rawRole === 'bk' ? 'manajemen_bk' : rawRole;
+      const username = r.username || (r.email ? r.email.split('@')[0] : (r.nip ? r.nip.replace(/\s+/g, '') : `guru.${i}`));
+      const password = r.password || (role === 'kkk' ? 'kkk123' : role === 'manajemen_bk' ? 'bk123' : 'guru123');
+
+      return {
+        id: r.id || `gw-imp-${Date.now()}-${i}`,
+        nip: r.nip || `19850101${Date.now() + i}`,
+        nama: r.nama || 'Pendidik SMKN 1 Jember',
+        gelar: r.gelar || 'S.Pd',
+        kelas: r.kelas || 'X KKBT',
+        jurusan: r.jurusan || 'Kriya Kreatif Batik dan Tekstil',
+        telepon: r.telepon || '081234567890',
+        email: r.email || `${username}@smkn1jember.sch.id`,
+        bio: r.bio || `Pendidik SMKN 1 Jember.`,
+        avatar: r.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+        role,
+        roleLabel: r.roleLabel,
+        username,
+        password,
+        statusAkun: r.statusAkun || 'Aktif'
+      };
+    });
 
     onConfirmImport(formatted, replaceExisting);
     onClose();
@@ -184,9 +196,10 @@ export const ModalImportGuruWaliExcel: React.FC<ModalImportGuruWaliExcelProps> =
                     <tr>
                       <th className="p-2">NIP</th>
                       <th className="p-2">Nama Lengkap</th>
-                      <th className="p-2">Gelar</th>
-                      <th className="p-2">Wali Kelas</th>
-                      <th className="p-2">Program Keahlian</th>
+                      <th className="p-2">Peran / Role</th>
+                      <th className="p-2">Kelas / Jurusan</th>
+                      <th className="p-2">Username Akun</th>
+                      <th className="p-2">Kata Sandi</th>
                       <th className="p-2">Telepon / WA</th>
                     </tr>
                   </thead>
@@ -194,10 +207,15 @@ export const ModalImportGuruWaliExcel: React.FC<ModalImportGuruWaliExcelProps> =
                     {parsedRows.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
                         <td className="p-2 font-mono text-slate-800">{row.nip}</td>
-                        <td className="p-2 font-bold text-slate-900">{row.nama}</td>
-                        <td className="p-2">{row.gelar}</td>
+                        <td className="p-2 font-bold text-slate-900">{row.nama}{row.gelar ? `, ${row.gelar}` : ''}</td>
+                        <td className="p-2 font-bold text-purple-700">
+                          {row.role === 'kkk' ? 'KKK (1 Jurusan)' :
+                           row.role === 'wali_kelas' ? 'Wali Kelas' :
+                           row.role === 'manajemen_bk' || (row.role as any) === 'bk' ? 'BK' : 'Guru Wali'}
+                        </td>
                         <td className="p-2 text-blue-700 font-bold">{row.kelas}</td>
-                        <td className="p-2 text-slate-600">{row.jurusan}</td>
+                        <td className="p-2 font-mono text-slate-700">{row.username || (row.email ? row.email.split('@')[0] : '-')}</td>
+                        <td className="p-2 font-mono text-slate-600">{row.password || 'guru123'}</td>
                         <td className="p-2 font-mono">{row.telepon}</td>
                       </tr>
                     ))}

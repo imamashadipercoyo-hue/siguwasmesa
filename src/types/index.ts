@@ -17,6 +17,11 @@ export interface GuruWali {
   email: string;
   avatar: string;
   bio: string;
+  role?: UserRole;
+  roleLabel?: string;
+  username?: string;
+  password?: string;
+  statusAkun?: 'Aktif' | 'Nonaktif';
 }
 
 export interface Siswa {
@@ -110,15 +115,18 @@ export interface KonsultasiWaliMurid {
   tanggalRespon?: string;
 }
 
+export type UserRole = 'admin' | 'guru_wali' | 'wali_kelas' | 'kkk' | 'manajemen_bk' | 'bk' | 'wali_murid';
+
 export interface UserAccount {
   id: string;
   username: string;
   password?: string;
   nama: string;
   email: string;
-  role: 'admin' | 'guru_wali' | 'manajemen_bk' | 'wali_murid';
+  role: UserRole;
   roleLabel: string;
-  kelas?: string; // Kelas yang diampu guru wali (misal: 'X KKBT', 'X TL') atau kelas siswa
+  kelas?: string; // Kelas diampu (Guru Wali: 1 kelas, Wali Kelas: beberapa kelas, BK: beberapa kelas, Admin: Semua Kelas, Wali Murid: kelas anak)
+  jurusan?: string; // Khusus KKK (1 Jurusan yang diampu)
   status: 'Aktif' | 'Nonaktif';
   lastLogin?: string;
   linkedId?: string; // id GuruWali atau id Siswa
@@ -133,5 +141,3 @@ export interface GoogleSheetsConfig {
   syncStatus: 'connected' | 'disconnected' | 'syncing' | 'error';
   syncMessage?: string;
 }
-
-export type UserRole = 'admin' | 'guru_wali' | 'wali_murid' | 'manajemen_bk';

@@ -44,7 +44,7 @@ var AKUN_HEADERS = [
   'Username / NISN',
   'Kata Sandi',
   'Nama Pengguna',
-  'Kelas Diampu',
+  'Kelas / Jurusan Diampu',
   'Email',
   'Peran / Role',
   'Status',
@@ -52,6 +52,24 @@ var AKUN_HEADERS = [
   'ID Akun',
   'Role System',
   'Kontak WA'
+];
+
+// Header resmi tabel Master Guru Wali & Kelas Pendidik (Terkoneksi Akun)
+var GURU_WALI_HEADERS = [
+  'No',
+  'NIP',
+  'Nama Lengkap',
+  'Gelar',
+  'Peran / Role',
+  'Kelas / Jurusan Diampu',
+  'Username Akun',
+  'Kata Sandi',
+  'Email',
+  'No Telepon / WA',
+  'Status Akun',
+  'ID Guru',
+  'Program Keahlian',
+  'Bio Singkat'
 ];
 
 /**
@@ -75,7 +93,7 @@ function doGet(e) {
         timestamp: new Date().toISOString(),
         data: {
           siswa: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.SISWA)),
-          guruWali: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.GURU_WALI)),
+          guruWali: getGuruWaliDataAsJson(ss.getSheetByName(SHEET_NAMES.GURU_WALI)),
           akun: getAkunDataAsJson(ss.getSheetByName(SHEET_NAMES.AKUN)),
           jurnal: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.JURNAL)),
           presensi: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.PRESENSI)),
@@ -130,7 +148,7 @@ function doPost(e) {
         // Simpan keseluruhan data
         if (payload.data) {
           if (payload.data.siswa) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.SISWA), payload.data.siswa);
-          if (payload.data.guruWali) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.GURU_WALI), payload.data.guruWali);
+          if (payload.data.guruWali) writeGuruWaliToSheet(ss.getSheetByName(SHEET_NAMES.GURU_WALI), payload.data.guruWali);
           if (payload.data.akun) writeAkunToSheet(ss.getSheetByName(SHEET_NAMES.AKUN), payload.data.akun);
           if (payload.data.jurnal) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.JURNAL), payload.data.jurnal);
           if (payload.data.presensi) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.PRESENSI), payload.data.presensi);
@@ -160,7 +178,7 @@ function doPost(e) {
 
       case 'saveGuruWaliList':
         if (payload.guruWaliList) {
-          writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.GURU_WALI), payload.guruWaliList);
+          writeGuruWaliToSheet(ss.getSheetByName(SHEET_NAMES.GURU_WALI), payload.guruWaliList);
         }
         result = { success: true, message: 'Data Master Guru Wali berhasil diperbarui di Google Sheets.' };
         break;
@@ -220,11 +238,25 @@ function writeAkunToSheet(sheet, akunList) {
     var item = uniqueAccounts[k];
     var no = k + 1;
     var username = String(item.username || '').trim();
-    var password = String(item.password || (item.role === 'admin' ? 'admin123' : item.role === 'guru_wali' ? 'guru123' : item.role === 'manajemen_bk' ? 'bk123' : '123456'));
+    var password = String(item.password || (item.role === 'admin' ? 'admin123' : item.role === 'kkk' ? 'kkk123' : (item.role === 'guru_wali' || item.role === 'wali_kelas') ? 'guru123' : (item.role === 'manajemen_bk' || item.role === 'bk') ? 'bk123' : '123456'));
     var nama = String(item.nama || '');
-    var kelas = String(item.kelas || (item.role === 'admin' ? 'Semua Kelas' : item.role === 'guru_wali' ? 'X KKBT' : '-'));
+    
+    // Lingkup pengampu sesuai peran: KKK = 1 jurusan, Guru Wali = 1 kelas, Wali Kelas & BK = beberapa kelas
+    var scopeDiampu = item.kelas || '-';
+    if (item.role === 'kkk') {
+      scopeDiampu = item.jurusan || item.kelas || 'Kriya Kreatif Batik dan Tekstil';
+    } else if (item.role === 'admin') {
+      scopeDiampu = 'Semua Kelas & Jurusan';
+    } else if (item.role === 'guru_wali') {
+      scopeDiampu = item.kelas || 'X KKBT';
+    } else if (item.role === 'wali_kelas') {
+      scopeDiampu = item.kelas || 'X KKBT, XI KKBT';
+    } else if (item.role === 'manajemen_bk' || item.role === 'bk') {
+      scopeDiampu = item.kelas || 'X KKBT, X TL';
+    }
+
     var email = String(item.email || '');
-    var roleLabel = String(item.roleLabel || (item.role === 'admin' ? 'Super Administrator' : 'Guru Wali'));
+    var roleLabel = String(item.roleLabel || (item.role === 'admin' ? 'Super Administrator' : item.role === 'kkk' ? ('KKK ' + scopeDiampu) : item.role === 'wali_kelas' ? ('Wali Kelas ' + scopeDiampu) : item.role === 'guru_wali' ? ('Guru Wali ' + scopeDiampu) : 'Pengguna'));
     var status = (String(item.status).toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif');
     var lastLogin = String(item.lastLogin || '-');
     var id = String(item.id || ('usr-' + username + '-' + (k + 1)));
@@ -244,7 +276,7 @@ function writeAkunToSheet(sheet, akunList) {
       username,
       password,
       nama,
-      kelas,
+      scopeDiampu,
       email,
       roleLabel,
       status,
@@ -313,7 +345,7 @@ function getAkunDataAsJson(sheet) {
 
     var password = String(rowObj['Kata Sandi'] || rowObj['Password'] || rowObj['password'] || '');
     var nama = String(rowObj['Nama Pengguna'] || rowObj['Nama'] || rowObj['nama'] || '');
-    var kelas = String(rowObj['Kelas Diampu'] || rowObj['Kelas'] || rowObj['kelas'] || '');
+    var kelas = String(rowObj['Kelas / Jurusan Diampu'] || rowObj['Kelas Diampu'] || rowObj['Jurusan Diampu'] || rowObj['Kelas'] || rowObj['kelas'] || '');
     var email = String(rowObj['Email'] || rowObj['email'] || '');
     var roleLabel = String(rowObj['Peran / Role'] || rowObj['Role Akses'] || rowObj['roleLabel'] || '');
     var status = String(rowObj['Status'] || rowObj['status'] || 'Aktif');
@@ -324,11 +356,16 @@ function getAkunDataAsJson(sheet) {
 
     // Inferensi role jika kosong
     if (!role) {
-      if (lowerUser.includes('admin') || roleLabel.toLowerCase().includes('admin')) {
+      var rLower = roleLabel.toLowerCase();
+      if (lowerUser.includes('admin') || rLower.includes('admin')) {
         role = 'admin';
-      } else if (roleLabel.toLowerCase().includes('bk') || lowerUser.includes('bk')) {
+      } else if (lowerUser.includes('kkk') || rLower.includes('kkk') || rLower.includes('konsentrasi') || rLower.includes('jurusan')) {
+        role = 'kkk';
+      } else if (lowerUser.includes('wali.kelas') || rLower.includes('wali kelas') || rLower.includes('walikelas')) {
+        role = 'wali_kelas';
+      } else if (rLower.includes('bk') || lowerUser.includes('bk') || rLower.includes('konseling') || rLower.includes('kesiswaan')) {
         role = 'manajemen_bk';
-      } else if (roleLabel.toLowerCase().includes('wali murid') || /^\\d{10}$/.test(cleanUsername)) {
+      } else if (rLower.includes('wali murid') || /^\\d{10}$/.test(cleanUsername)) {
         role = 'wali_murid';
       } else {
         role = 'guru_wali';
@@ -336,8 +373,15 @@ function getAkunDataAsJson(sheet) {
     }
 
     if (!roleLabel) {
-      roleLabel = (role === 'admin' ? 'Super Administrator' : role === 'guru_wali' ? ('Guru Wali ' + (kelas || '')) : role === 'manajemen_bk' ? 'Koordinator BK' : 'Wali Murid');
+      if (role === 'admin') roleLabel = 'Super Administrator';
+      else if (role === 'kkk') roleLabel = 'Ketua Konsentrasi Keahlian (KKK) ' + kelas;
+      else if (role === 'wali_kelas') roleLabel = 'Wali Kelas ' + kelas;
+      else if (role === 'manajemen_bk' || role === 'bk') roleLabel = 'Guru BK & Konselor';
+      else if (role === 'guru_wali') roleLabel = 'Guru Wali Kelas ' + kelas;
+      else roleLabel = 'Wali Murid ' + kelas;
     }
+
+    var jurusan = (role === 'kkk' ? kelas : undefined);
 
     result.push({
       id: id,
@@ -345,12 +389,193 @@ function getAkunDataAsJson(sheet) {
       password: password,
       nama: nama,
       kelas: kelas,
+      jurusan: jurusan,
       email: email,
       role: role,
       roleLabel: roleLabel.trim(),
       status: (status.toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif'),
       lastLogin: lastLogin,
       telepon: telepon
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Khusus Guru Wali & Pendidik: Menulis data guru dengan sinkronisasi peran dan akun:
+ * No | NIP | Nama Lengkap | Gelar | Peran / Role | Kelas / Jurusan Diampu | Username Akun | Kata Sandi | Email | No Telepon / WA | Status Akun | ID Guru | Program Keahlian | Bio Singkat
+ */
+function writeGuruWaliToSheet(sheet, guruList) {
+  if (!guruList || guruList.length === 0) return;
+  sheet.clear();
+
+  var seenNip = {};
+  var uniqueGurus = [];
+  for (var i = 0; i < guruList.length; i++) {
+    var g = guruList[i];
+    if (!g) continue;
+    var key = (g.nip ? String(g.nip).trim() : '') || (g.nama ? String(g.nama).trim() : 'gw-' + i);
+    if (!seenNip[key]) {
+      seenNip[key] = true;
+      uniqueGurus.push(g);
+    }
+  }
+
+  var rows = [GURU_WALI_HEADERS];
+
+  for (var k = 0; k < uniqueGurus.length; k++) {
+    var guru = uniqueGurus[k];
+    var no = k + 1;
+    var nip = String(guru.nip || '').replace(/^'/, '').trim();
+    var nama = String(guru.nama || '').trim();
+    var gelar = String(guru.gelar || '').trim();
+    var rawRole = String(guru.role || 'guru_wali').toLowerCase();
+    var roleLabel = String(guru.roleLabel || '');
+    var scopeDiampu = String(guru.kelas || '');
+
+    if (rawRole === 'kkk') {
+      scopeDiampu = String(guru.jurusan || guru.kelas || 'Kriya Kreatif Batik dan Tekstil');
+      if (!roleLabel) roleLabel = 'Ketua Konsentrasi Keahlian (KKK) ' + scopeDiampu;
+    } else if (rawRole === 'wali_kelas') {
+      if (!roleLabel) roleLabel = 'Wali Kelas ' + scopeDiampu;
+    } else if (rawRole === 'manajemen_bk' || rawRole === 'bk') {
+      if (!roleLabel) roleLabel = 'Guru BK & Konselor';
+    } else {
+      if (!roleLabel) roleLabel = 'Guru Wali Kelas ' + scopeDiampu;
+    }
+
+    var username = String(guru.username || (guru.email ? guru.email.split('@')[0] : nip.replace(/\\s+/g, ''))).replace(/^'/, '').trim();
+    var password = String(guru.password || (rawRole === 'kkk' ? 'kkk123' : rawRole === 'manajemen_bk' ? 'bk123' : 'guru123'));
+    var email = String(guru.email || (username ? username + '@smkn1jember.sch.id' : ''));
+    var telepon = String(guru.telepon || '').replace(/^'/, '');
+    var status = String(guru.statusAkun || 'Aktif');
+    var id = String(guru.id || 'gw-' + (k + 1));
+    var jurusan = String(guru.jurusan || '');
+    var bio = String(guru.bio || '');
+
+    if (/^0\\d+/.test(nip)) nip = "'" + nip;
+    if (/^0\\d+/.test(telepon)) telepon = "'" + telepon;
+    if (/^0\\d+/.test(username)) username = "'" + username;
+
+    rows.push([
+      no,
+      nip,
+      nama,
+      gelar,
+      roleLabel,
+      scopeDiampu,
+      username,
+      password,
+      email,
+      telepon,
+      status,
+      id,
+      jurusan,
+      bio
+    ]);
+  }
+
+  var range = sheet.getRange(1, 1, rows.length, GURU_WALI_HEADERS.length);
+  range.setValues(rows);
+
+  var headerRange = sheet.getRange(1, 1, 1, GURU_WALI_HEADERS.length);
+  headerRange.setBackground('#1e3a8a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+
+  if (rows.length > 1) {
+    sheet.getRange(2, 1, rows.length - 1, 1).setHorizontalAlignment('center');
+    sheet.getRange(2, 11, rows.length - 1, 1).setHorizontalAlignment('center');
+  }
+
+  for (var col = 1; col <= GURU_WALI_HEADERS.length; col++) {
+    sheet.autoResizeColumn(col);
+  }
+}
+
+/**
+ * Khusus Guru Wali: Membaca tabel GuruWali dari Google Sheets dan sinkronisasi ke JSON
+ */
+function getGuruWaliDataAsJson(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= 1 || lastCol === 0) return [];
+
+  var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  var headers = values[0];
+  var result = [];
+
+  for (var r = 1; r < values.length; r++) {
+    var rowValues = values[r];
+    var rowObj = {};
+
+    for (var c = 0; c < headers.length; c++) {
+      var h = String(headers[c] || '').trim();
+      var val = rowValues[c];
+      if (val === undefined || val === null) val = '';
+      rowObj[h] = val;
+    }
+
+    var nip = String(rowObj['NIP'] || rowObj['nip'] || '').replace(/^'/, '').trim();
+    var nama = String(rowObj['Nama Lengkap'] || rowObj['Nama'] || rowObj['nama'] || '').trim();
+    if (!nama && !nip) continue;
+
+    var gelar = String(rowObj['Gelar'] || rowObj['gelar'] || '').trim();
+    var rawRole = String(rowObj['Peran / Role'] || rowObj['Role'] || rowObj['role'] || '').toLowerCase();
+    var scopeDiampu = String(rowObj['Kelas / Jurusan Diampu'] || rowObj['Kelas'] || rowObj['kelas'] || 'X KKBT').trim();
+    var username = String(rowObj['Username Akun'] || rowObj['Username'] || rowObj['username'] || '').replace(/^'/, '').trim();
+    var password = String(rowObj['Kata Sandi'] || rowObj['Password'] || rowObj['password'] || '').trim();
+    var email = String(rowObj['Email'] || rowObj['email'] || '').trim();
+    var telepon = String(rowObj['No Telepon / WA'] || rowObj['telepon'] || '').replace(/^'/, '').trim();
+    var statusAkun = String(rowObj['Status Akun'] || rowObj['status'] || 'Aktif').trim();
+    var id = String(rowObj['ID Guru'] || rowObj['id'] || ('gw-' + r)).trim();
+    var jurusan = String(rowObj['Program Keahlian'] || rowObj['jurusan'] || '').trim();
+    var bio = String(rowObj['Bio Singkat'] || rowObj['bio'] || '').trim();
+
+    var role = 'guru_wali';
+    if (rawRole.includes('kkk') || rawRole.includes('konsentrasi') || rawRole.includes('jurusan')) {
+      role = 'kkk';
+    } else if (rawRole.includes('wali_kelas') || rawRole.includes('walikelas') || rawRole.includes('wali kelas') || scopeDiampu.includes(',')) {
+      role = 'wali_kelas';
+    } else if (rawRole.includes('bk') || rawRole.includes('konseling') || rawRole.includes('kesiswaan')) {
+      role = 'manajemen_bk';
+    } else {
+      role = 'guru_wali';
+    }
+
+    var roleLabel = String(rowObj['Peran / Role'] || '');
+    if (!roleLabel) {
+      if (role === 'kkk') roleLabel = 'Ketua Konsentrasi Keahlian (KKK) ' + (jurusan || scopeDiampu);
+      else if (role === 'wali_kelas') roleLabel = 'Wali Kelas ' + scopeDiampu;
+      else if (role === 'manajemen_bk') roleLabel = 'Guru BK & Konselor';
+      else roleLabel = 'Guru Wali Kelas ' + scopeDiampu;
+    }
+
+    if (!username) {
+      username = email ? email.split('@')[0] : (nip ? nip.replace(/\\s+/g, '') : ('guru' + r));
+    }
+    if (!password) {
+      password = role === 'kkk' ? 'kkk123' : role === 'manajemen_bk' ? 'bk123' : 'guru123';
+    }
+
+    result.push({
+      id: id,
+      nip: nip,
+      nama: nama,
+      gelar: gelar,
+      kelas: scopeDiampu,
+      jurusan: jurusan || (role === 'kkk' ? scopeDiampu : ''),
+      telepon: telepon,
+      email: email,
+      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+      bio: bio || (roleLabel + ' SMKN 1 Jember.'),
+      role: role,
+      roleLabel: roleLabel,
+      username: username,
+      password: password,
+      statusAkun: (statusAkun.toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif')
     });
   }
 

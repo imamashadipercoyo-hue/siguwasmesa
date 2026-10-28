@@ -20,9 +20,11 @@ import {
   BookOpen,
   Send,
   Cloud,
-  CloudCheck,
   Check,
-  X
+  X,
+  Briefcase,
+  ShieldCheck,
+  Layers
 } from 'lucide-react';
 import {
   exportSiswaToExcel,
@@ -30,12 +32,26 @@ import {
   exportAkunToExcel,
   downloadTemplateSiswaExcel
 } from '../../utils/excelUtils';
-import { Siswa, GuruWali, UserAccount } from '../../types';
+import { Siswa, GuruWali, UserAccount, UserRole } from '../../types';
 import { ModalImportSiswaExcel } from './ModalImportSiswaExcel';
 import { ModalImportGuruWaliExcel } from './ModalImportGuruWaliExcel';
 import { ModalImportAkunExcel } from './ModalImportAkunExcel';
 import { PanduanAppsScriptModal } from './PanduanAppsScriptModal';
 import { DEFAULT_APPS_SCRIPT_URL, testAppsScriptConnection } from '../../services/googleSheetsService';
+
+export const DAFTAR_JURUSAN_SMKN1 = [
+  'Kriya Kreatif Batik dan Tekstil',
+  'Teknik Logistik',
+  'Bisnis Digital',
+  'Akuntansi dan Keuangan Lembaga',
+  'Manajemen Perkantoran dan Layanan Bisnis',
+  'Desain Komunikasi Visual',
+  'Usaha Layanan Wisata',
+  'Perhotelan',
+  'Kuliner',
+  'Teknik Komputer dan Jaringan',
+  'Rekayasa Perangkat Lunak'
+];
 
 export const AdminMasterView: React.FC = () => {
   const {
@@ -102,8 +118,15 @@ export const AdminMasterView: React.FC = () => {
     telepon: '081234567890',
     email: '',
     bio: '',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    role: 'guru_wali',
+    roleLabel: 'Guru Wali Kelas X KKBT',
+    username: '',
+    password: 'guru123',
+    statusAkun: 'Aktif'
   });
+  const [guruSearchQuery, setGuruSearchQuery] = useState('');
+  const [guruRoleFilter, setGuruRoleFilter] = useState('all');
 
   // Akun Form Modal (Add / Edit)
   const [editingAkun, setEditingAkun] = useState<UserAccount | null>(null);
@@ -116,11 +139,13 @@ export const AdminMasterView: React.FC = () => {
     role: 'guru_wali',
     roleLabel: 'Guru Wali',
     kelas: 'X KKBT',
+    jurusan: '',
     status: 'Aktif',
     telepon: ''
   });
   const [akunSearchQuery, setAkunSearchQuery] = useState('');
   const [akunKelasFilter, setAkunKelasFilter] = useState('all');
+  const [akunRoleFilter, setAkunRoleFilter] = useState('all');
 
   // Google Sheets state
   const [urlInput, setUrlInput] = useState(googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL);
@@ -160,7 +185,25 @@ export const AdminMasterView: React.FC = () => {
     setEditingSiswa(null);
   };
 
-  // Handle Guru Wali Form Submit
+  // Helper to toggle classes for multi-class roles (Wali Kelas & BK) in Guru Form
+  const toggleClassInGuruForm = (clsName: string) => {
+    const currentList = (guruFormData.kelas || '')
+      .split(',')
+      .map(c => c.trim())
+      .filter(Boolean);
+    let updatedList: string[];
+    if (currentList.includes(clsName)) {
+      updatedList = currentList.filter(c => c !== clsName);
+    } else {
+      updatedList = [...currentList, clsName];
+    }
+    setGuruFormData(prev => ({
+      ...prev,
+      kelas: updatedList.join(', ')
+    }));
+  };
+
+  // Handle Guru Wali Form Submit (Terkoneksi Master Akun Pengguna)
   const handleSaveGuru = (e: React.FormEvent) => {
     e.preventDefault();
     if (!guruFormData.nama || !guruFormData.nip) {
@@ -168,13 +211,65 @@ export const AdminMasterView: React.FC = () => {
       return;
     }
 
+    const role = (guruFormData.role || 'guru_wali') as UserRole;
+    let assignedKelas = guruFormData.kelas || '';
+    let assignedJurusan = guruFormData.jurusan || '';
+    let roleLabel = guruFormData.roleLabel || '';
+
+    if (role === 'kkk') {
+      assignedJurusan = assignedJurusan || DAFTAR_JURUSAN_SMKN1[0];
+      assignedKelas = assignedJurusan;
+      roleLabel = `KKK (Ketua Jurusan ${assignedJurusan})`;
+    } else if (role === 'guru_wali') {
+      assignedKelas = assignedKelas || uniqueClasses[0] || 'X KKBT';
+      roleLabel = `Guru Wali Kelas ${assignedKelas}`;
+    } else if (role === 'wali_kelas') {
+      assignedKelas = assignedKelas || 'X KKBT';
+      roleLabel = `Wali Kelas (${assignedKelas})`;
+    } else if (role === 'manajemen_bk' || (role as string) === 'bk') {
+      assignedKelas = assignedKelas || 'Semua Kelas X';
+      roleLabel = `BK (${assignedKelas})`;
+    }
+
+    const cleanUsername = (guruFormData.username || (guruFormData.email ? guruFormData.email.split('@')[0] : guruFormData.nip.replace(/\s+/g, ''))).toLowerCase().trim();
+    const defaultPassword = guruFormData.password || (role === 'kkk' ? 'kkk123' : role === 'manajemen_bk' ? 'bk123' : 'guru123');
+
+    const payload: Partial<GuruWali> = {
+      ...guruFormData,
+      role,
+      roleLabel,
+      kelas: assignedKelas,
+      jurusan: assignedJurusan,
+      username: cleanUsername,
+      password: defaultPassword,
+      statusAkun: guruFormData.statusAkun || 'Aktif'
+    };
+
     if (editingGuru) {
-      updateGuruWali(editingGuru.id, guruFormData);
+      updateGuruWali(editingGuru.id, payload);
     } else {
-      addGuruWali(guruFormData as Omit<GuruWali, 'id'>);
+      addGuruWali(payload as Omit<GuruWali, 'id'>);
     }
     setIsGuruFormOpen(false);
     setEditingGuru(null);
+  };
+
+  // Helper to toggle classes for multi-class roles (Wali Kelas & BK)
+  const toggleClassInAkunForm = (clsName: string) => {
+    const currentList = (akunFormData.kelas || '')
+      .split(',')
+      .map(c => c.trim())
+      .filter(Boolean);
+    let updatedList: string[];
+    if (currentList.includes(clsName)) {
+      updatedList = currentList.filter(c => c !== clsName);
+    } else {
+      updatedList = [...currentList, clsName];
+    }
+    setAkunFormData(prev => ({
+      ...prev,
+      kelas: updatedList.join(', ')
+    }));
   };
 
   // Handle Akun Form Submit
@@ -185,14 +280,34 @@ export const AdminMasterView: React.FC = () => {
       return;
     }
 
-    const assignedKelas = akunFormData.kelas || (
-      akunFormData.role === 'admin' ? 'Semua Kelas' :
-      akunFormData.role === 'guru_wali' ? 'X KKBT' :
-      akunFormData.role === 'manajemen_bk' ? 'Semua Kelas X' : '-'
-    );
+    const role = (akunFormData.role || 'guru_wali') as UserRole;
+    let assignedKelas = akunFormData.kelas || '';
+    let assignedJurusan = akunFormData.jurusan || '';
+    let roleLabel = akunFormData.roleLabel || '';
+
+    if (role === 'kkk') {
+      assignedJurusan = assignedJurusan || akunFormData.kelas || DAFTAR_JURUSAN_SMKN1[0];
+      assignedKelas = assignedJurusan;
+      roleLabel = `KKK (Ketua Jurusan ${assignedJurusan})`;
+    } else if (role === 'guru_wali') {
+      assignedKelas = assignedKelas || uniqueClasses[0] || 'X KKBT';
+      roleLabel = `Guru Wali Kelas ${assignedKelas}`;
+    } else if (role === 'wali_kelas') {
+      assignedKelas = assignedKelas || 'X KKBT';
+      roleLabel = `Wali Kelas (${assignedKelas})`;
+    } else if (role === 'manajemen_bk' || (role as string) === 'bk') {
+      assignedKelas = assignedKelas || 'Semua Kelas X';
+      roleLabel = `BK (${assignedKelas})`;
+    } else if (role === 'admin') {
+      assignedKelas = 'Semua Kelas';
+      roleLabel = 'Super Administrator';
+    } else if (role === 'wali_murid') {
+      assignedKelas = assignedKelas || uniqueClasses[0] || 'X KKBT';
+      roleLabel = `Wali Murid (${assignedKelas})`;
+    }
 
     let linkedId = akunFormData.linkedId;
-    if (akunFormData.role === 'guru_wali' && !linkedId) {
+    if (role === 'guru_wali' && !linkedId) {
       const matchGW = guruWaliList.find(g => 
         g.kelas === assignedKelas || 
         g.nama.toLowerCase().includes((akunFormData.nama || '').toLowerCase())
@@ -202,7 +317,10 @@ export const AdminMasterView: React.FC = () => {
 
     const payload: Partial<UserAccount> = {
       ...akunFormData,
+      role,
+      roleLabel,
       kelas: assignedKelas,
+      jurusan: assignedJurusan,
       linkedId
     };
 
@@ -499,16 +617,21 @@ export const AdminMasterView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: MASTER GURU WALI & WALI KELAS */}
+      {/* TAB 2: MASTER GURU WALI & WALI KELAS (TERKONEKSI MASTER AKUN) */}
       {activeAdminTab === 'guru' && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-base">
-                Master Data Guru Wali & Wali Kelas ({guruWaliList.length} Guru)
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  Master Data Guru Wali & Pendidik ({guruWaliList.length} Pendidik Terdaftar)
+                </h3>
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  ✓ Terkoneksi Master Akun
+                </span>
+              </div>
               <p className="text-xs text-slate-500">
-                Manajemen akun pendidik, penugasan kelas binaan, dan export data guru wali SMKN 1 Jember.
+                Manajemen data pendidik (Guru Wali 1 kelas, Wali Kelas multi-kelas, KKK 1 jurusan, BK), penugasan kelas, dan akun login yang sinkron dengan Google Sheets.
               </p>
             </div>
 
@@ -537,12 +660,17 @@ export const AdminMasterView: React.FC = () => {
                     nip: '',
                     nama: '',
                     gelar: 'S.Pd',
-                    kelas: 'X KKBT',
+                    kelas: uniqueClasses[0] || 'X KKBT',
                     jurusan: 'Kriya Kreatif Batik dan Tekstil',
                     telepon: '081234567890',
                     email: '',
                     bio: '',
-                    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+                    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+                    role: 'guru_wali',
+                    roleLabel: `Guru Wali Kelas ${uniqueClasses[0] || 'X KKBT'}`,
+                    username: '',
+                    password: 'guru123',
+                    statusAkun: 'Aktif'
                   });
                   setIsGuruFormOpen(true);
                 }}
@@ -554,66 +682,175 @@ export const AdminMasterView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {guruWaliList.map((guru, idx) => (
-              <div
-                key={`${guru.id}-${guru.nip}-${idx}`}
-                className="p-4 rounded-2xl border border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-white shadow-xs transition-all space-y-3"
+          {/* Search & Role Filter Toolbar Guru Wali */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+            <div className="relative flex-1 w-full">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Cari nama pendidik, NIP, kelas/jurusan diampu, email, atau username akun..."
+                value={guruSearchQuery}
+                onChange={(e) => setGuruSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-blue-600 font-medium"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Peran / Role:</span>
+              <select
+                value={guruRoleFilter}
+                onChange={(e) => setGuruRoleFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:outline-blue-600 w-full sm:w-auto"
               >
-                <div className="flex items-start gap-3">
-                  <img
-                    src={guru.avatar}
-                    alt={guru.nama}
-                    className="w-12 h-12 rounded-xl object-cover ring-2 ring-blue-600/30 shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                        Wali Kelas {guru.kelas}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setEditingGuru(guru);
-                            setGuruFormData(guru);
-                            setIsGuruFormOpen(true);
-                          }}
-                          className="p-1 text-slate-500 hover:text-blue-700 rounded cursor-pointer"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Hapus data guru ${guru.nama}?`)) {
-                              deleteGuruWali(guru.id);
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                <option value="all">Semua Peran ({guruWaliList.length})</option>
+                <option value="guru_wali">Guru Wali (1 Kelas Saja)</option>
+                <option value="wali_kelas">Wali Kelas (Beberapa Kelas)</option>
+                <option value="kkk">KKK (1 Jurusan)</option>
+                <option value="manajemen_bk">BK (Beberapa Kelas)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {guruWaliList
+              .filter(guru => {
+                if (guruRoleFilter !== 'all') {
+                  const gRole = guru.role || (guru.jurusan?.toLowerCase().includes('bk') ? 'manajemen_bk' : guru.kelas.includes(',') ? 'wali_kelas' : 'guru_wali');
+                  if (guruRoleFilter === 'manajemen_bk' && gRole !== 'manajemen_bk' && (gRole as string) !== 'bk') return false;
+                  else if (guruRoleFilter !== 'manajemen_bk' && gRole !== guruRoleFilter) return false;
+                }
+                if (guruSearchQuery.trim()) {
+                  const q = guruSearchQuery.toLowerCase();
+                  const mNama = guru.nama.toLowerCase().includes(q);
+                  const mNip = guru.nip.toLowerCase().includes(q);
+                  const mKelas = (guru.kelas || '').toLowerCase().includes(q);
+                  const mEmail = (guru.email || '').toLowerCase().includes(q);
+                  const mUser = (guru.username || '').toLowerCase().includes(q);
+                  const mJur = (guru.jurusan || '').toLowerCase().includes(q);
+                  if (!mNama && !mNip && !mKelas && !mEmail && !mUser && !mJur) return false;
+                }
+                return true;
+              })
+              .map((guru, idx) => {
+                const linkedAcc = akunList.find(a => 
+                  a.linkedId === guru.id ||
+                  (guru.username && a.username.toLowerCase() === guru.username.toLowerCase()) ||
+                  (guru.email && a.email && a.email.toLowerCase() === guru.email.toLowerCase())
+                );
+                const effectiveRole = guru.role || linkedAcc?.role || (guru.jurusan?.toLowerCase().includes('bk') ? 'manajemen_bk' : guru.kelas.includes(',') ? 'wali_kelas' : 'guru_wali');
+                const effectiveUsername = guru.username || linkedAcc?.username || (guru.email ? guru.email.split('@')[0] : guru.nip.replace(/\s+/g, ''));
+                const effectivePassword = guru.password || linkedAcc?.password || (effectiveRole === 'kkk' ? 'kkk123' : effectiveRole === 'manajemen_bk' ? 'bk123' : 'guru123');
+                const isAccActive = (guru.statusAkun || linkedAcc?.status) !== 'Nonaktif';
+
+                return (
+                  <div
+                    key={`${guru.id}-${guru.nip}-${idx}`}
+                    className="p-4 rounded-2xl border border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-white shadow-xs transition-all space-y-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={guru.avatar}
+                        alt={guru.nama}
+                        className="w-12 h-12 rounded-xl object-cover ring-2 ring-blue-600/30 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          {/* Role Badge with clean colors */}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            effectiveRole === 'kkk' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                            effectiveRole === 'wali_kelas' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
+                            effectiveRole === 'manajemen_bk' || (effectiveRole as string) === 'bk' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            'bg-blue-100 text-blue-800 border border-blue-200'
+                          }`}>
+                            {effectiveRole === 'kkk' && '🏢 KKK (1 Jurusan)'}
+                            {effectiveRole === 'wali_kelas' && '📚 Wali Kelas (Multi)'}
+                            {effectiveRole === 'guru_wali' && '🏫 Guru Wali (1 Kelas)'}
+                            {(effectiveRole === 'manajemen_bk' || (effectiveRole as string) === 'bk') && '🛡️ BK & Konseling'}
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingGuru(guru);
+                                setGuruFormData({
+                                  ...guru,
+                                  role: effectiveRole as UserRole,
+                                  roleLabel: guru.roleLabel || linkedAcc?.roleLabel,
+                                  username: effectiveUsername,
+                                  password: effectivePassword,
+                                  statusAkun: isAccActive ? 'Aktif' : 'Nonaktif'
+                                });
+                                setIsGuruFormOpen(true);
+                              }}
+                              className="p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                              title="Ubah Data Pendidik & Akun Terkoneksi"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Hapus data pendidik ${guru.nama} beserta akun pengguna terkait?`)) {
+                                  deleteGuruWali(guru.id);
+                                }
+                              }}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer transition-colors"
+                              title="Hapus Data & Akun"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <h4 className="font-extrabold text-slate-900 text-sm mt-1 leading-snug">
+                          {guru.nama}{guru.gelar ? `, ${guru.gelar}` : ''}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-mono">
+                          NIP. {guru.nip}
+                        </p>
                       </div>
                     </div>
-                    <h4 className="font-extrabold text-slate-900 text-sm mt-1 leading-snug">
-                      {guru.nama}, {guru.gelar}
-                    </h4>
-                    <p className="text-[11px] text-slate-500 font-mono">
-                      NIP. {guru.nip}
+
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1.5">
+                      <div className="flex items-start justify-between">
+                        <span className="font-bold text-slate-700">Lingkup Diampu:</span>
+                        <span className="font-bold text-blue-900 text-right bg-blue-50 px-2 py-0.5 rounded text-[11px] border border-blue-200">
+                          {effectiveRole === 'kkk' ? (guru.jurusan || guru.kelas) : guru.kelas}
+                        </span>
+                      </div>
+                      <p><strong>Program Keahlian:</strong> {guru.jurusan || '-'}</p>
+                      <p><strong>Kontak WA:</strong> {guru.telepon}</p>
+                      <p><strong>Email:</strong> {guru.email}</p>
+                    </div>
+
+                    {/* Akun Pengguna Terkoneksi Card Footer */}
+                    <div className="bg-slate-100/80 p-2.5 rounded-xl border border-slate-200 text-[11px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800 flex items-center gap-1">
+                          <KeyRound className="w-3 h-3 text-blue-700" />
+                          <span>Akun Login Terkoneksi</span>
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isAccActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {isAccActive ? '● Akun Aktif' : '○ Nonaktif'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-slate-600 pt-0.5 font-mono text-[10px]">
+                        <div>User: <span className="font-bold text-slate-900">{effectiveUsername}</span></div>
+                        <div>Sandi: <span className="font-bold text-slate-900">{effectivePassword}</span></div>
+                      </div>
+                      <div className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 pt-0.5">
+                        <Check className="w-3 h-3" />
+                        <span>Tersinkron dengan Master Akun & Google Sheets</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 italic line-clamp-2">
+                      "{guru.bio}"
                     </p>
                   </div>
-                </div>
-
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
-                  <p><strong>Jurusan:</strong> {guru.jurusan}</p>
-                  <p><strong>No WhatsApp:</strong> {guru.telepon}</p>
-                  <p><strong>Email:</strong> {guru.email}</p>
-                </div>
-
-                <p className="text-[11px] text-slate-500 italic line-clamp-2">
-                  "{guru.bio}"
-                </p>
-              </div>
-            ))}
+                );
+              })}
           </div>
         </div>
       )}
@@ -679,25 +916,51 @@ export const AdminMasterView: React.FC = () => {
               <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Cari username, nama pengguna, kelas diampu, atau email..."
+                placeholder="Cari username, nama pengguna, kelas/jurusan diampu, atau email..."
                 value={akunSearchQuery}
                 onChange={(e) => setAkunSearchQuery(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-blue-600 font-medium"
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Filter Kelas:</span>
-              <select
-                value={akunKelasFilter}
-                onChange={(e) => setAkunKelasFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:outline-blue-600"
-              >
-                <option value="all">Semua Kelas</option>
-                {uniqueClasses.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Peran:</span>
+                <select
+                  value={akunRoleFilter}
+                  onChange={(e) => setAkunRoleFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:outline-blue-600"
+                >
+                  <option value="all">Semua Peran ({akunList.length})</option>
+                  <option value="guru_wali">Guru Wali (1 Kelas Saja)</option>
+                  <option value="wali_kelas">Wali Kelas (Beberapa Kelas)</option>
+                  <option value="manajemen_bk">BK (Beberapa Kelas)</option>
+                  <option value="kkk">KKK (1 Jurusan)</option>
+                  <option value="admin">Administrator</option>
+                  <option value="wali_murid">Wali Murid</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Kelas / Jurusan:</span>
+                <select
+                  value={akunKelasFilter}
+                  onChange={(e) => setAkunKelasFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:outline-blue-600"
+                >
+                  <option value="all">Semua Kelas / Jurusan</option>
+                  <optgroup label="Daftar Kelas">
+                    {uniqueClasses.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Daftar Jurusan (KKK)">
+                    {DAFTAR_JURUSAN_SMKN1.map(j => (
+                      <option key={j} value={j}>{j}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -709,7 +972,7 @@ export const AdminMasterView: React.FC = () => {
                   <th className="p-3">Username / NISN</th>
                   <th className="p-3">Kata Sandi</th>
                   <th className="p-3">Nama Pengguna</th>
-                  <th className="p-3">Kelas Diampu</th>
+                  <th className="p-3">Kelas / Jurusan Diampu</th>
                   <th className="p-3">Email</th>
                   <th className="p-3">Peran / Role</th>
                   <th className="p-3 text-center">Status</th>
@@ -720,15 +983,23 @@ export const AdminMasterView: React.FC = () => {
               <tbody className="divide-y divide-slate-100 font-medium">
                 {akunList
                   .filter(akun => {
-                    if (akunKelasFilter !== 'all' && (akun.kelas || '') !== akunKelasFilter) return false;
+                    if (akunRoleFilter !== 'all') {
+                      if (akunRoleFilter === 'manajemen_bk' && (akun.role !== 'manajemen_bk' && (akun.role as string) !== 'bk')) return false;
+                      else if (akunRoleFilter !== 'manajemen_bk' && akun.role !== akunRoleFilter) return false;
+                    }
+                    if (akunKelasFilter !== 'all') {
+                      const scope = `${akun.kelas || ''} ${akun.jurusan || ''}`.toLowerCase();
+                      if (!scope.includes(akunKelasFilter.toLowerCase())) return false;
+                    }
                     if (akunSearchQuery.trim()) {
                       const q = akunSearchQuery.toLowerCase();
                       const mUser = akun.username.toLowerCase().includes(q);
                       const mName = akun.nama.toLowerCase().includes(q);
                       const mEmail = akun.email.toLowerCase().includes(q);
                       const mKelas = (akun.kelas || '').toLowerCase().includes(q);
-                      const mRole = akun.roleLabel.toLowerCase().includes(q);
-                      if (!mUser && !mName && !mEmail && !mKelas && !mRole) return false;
+                      const mJurusan = (akun.jurusan || '').toLowerCase().includes(q);
+                      const mRole = (akun.roleLabel || akun.role).toLowerCase().includes(q);
+                      if (!mUser && !mName && !mEmail && !mKelas && !mJurusan && !mRole) return false;
                     }
                     return true;
                   })
@@ -737,34 +1008,60 @@ export const AdminMasterView: React.FC = () => {
                     <td className="p-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="p-3 font-mono font-bold text-slate-900">{akun.username}</td>
                     <td className="p-3 font-mono text-[11px] font-semibold text-slate-600 bg-slate-50/70 px-2.5 py-1 rounded">
-                      {akun.password || (akun.role === 'admin' ? 'admin123' : akun.role === 'guru_wali' ? 'guru123' : akun.role === 'manajemen_bk' ? 'bk123' : '123456')}
+                      {akun.password || (
+                        akun.role === 'admin' ? 'admin123' :
+                        akun.role === 'kkk' ? 'kkk123' :
+                        akun.role === 'guru_wali' || akun.role === 'wali_kelas' ? 'guru123' :
+                        akun.role === 'manajemen_bk' || (akun.role as string) === 'bk' ? 'bk123' : '123456'
+                      )}
                     </td>
                     <td className="p-3 font-bold text-slate-800">{akun.nama}</td>
                     <td className="p-3">
-                      {akun.role === 'guru_wali' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 font-extrabold text-xs shadow-2xs">
-                          <GraduationCap className="w-3.5 h-3.5 text-blue-700" />
-                          <span>{akun.kelas || 'X KKBT'}</span>
+                      {akun.role === 'kkk' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-950 font-extrabold text-xs shadow-2xs">
+                          <Briefcase className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <span>1 Jurusan: {akun.jurusan || akun.kelas || 'KKBT'}</span>
                         </span>
-                      ) : akun.role === 'wali_murid' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs">
-                          <span>{akun.kelas || '-'}</span>
+                      ) : akun.role === 'guru_wali' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 font-extrabold text-xs shadow-2xs">
+                          <GraduationCap className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+                          <span>1 Kelas: {akun.kelas || 'X KKBT'}</span>
+                        </span>
+                      ) : akun.role === 'wali_kelas' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 font-bold text-xs shadow-2xs">
+                          <Users className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>Beberapa Kelas: {akun.kelas || 'X KKBT, XI KKBT'}</span>
+                        </span>
+                      ) : akun.role === 'manajemen_bk' || (akun.role as string) === 'bk' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs shadow-2xs">
+                          <ShieldCheck className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                          <span>Beberapa Kelas: {akun.kelas || 'X KKBT, X TL'}</span>
+                        </span>
+                      ) : akun.role === 'admin' ? (
+                        <span className="text-slate-600 font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                          Semua Kelas & Jurusan
                         </span>
                       ) : (
-                        <span className="text-slate-500 font-semibold text-xs">
-                          {akun.kelas || (akun.role === 'admin' ? 'Semua Kelas' : 'Semua Kelas X')}
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 font-bold text-xs">
+                          <span>Kelas: {akun.kelas || '-'}</span>
                         </span>
                       )}
                     </td>
                     <td className="p-3 text-slate-600">{akun.email}</td>
                     <td className="p-3">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                        akun.role === 'admin' ? 'bg-amber-100 text-amber-900' :
-                        akun.role === 'guru_wali' ? 'bg-blue-100 text-blue-900' :
-                        akun.role === 'manajemen_bk' ? 'bg-purple-100 text-purple-900' :
-                        'bg-emerald-100 text-emerald-900'
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                        akun.role === 'admin' ? 'bg-slate-100 text-slate-800 border-slate-300' :
+                        akun.role === 'kkk' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                        akun.role === 'wali_kelas' ? 'bg-amber-100 text-amber-900 border-amber-300' :
+                        akun.role === 'guru_wali' ? 'bg-blue-100 text-blue-900 border-blue-300' :
+                        akun.role === 'manajemen_bk' || (akun.role as string) === 'bk' ? 'bg-purple-100 text-purple-900 border-purple-300' :
+                        'bg-teal-100 text-teal-900 border-teal-300'
                       }`}>
-                        {akun.roleLabel}
+                        {akun.role === 'kkk' ? 'KKK (Ketua Jurusan)' :
+                         akun.role === 'wali_kelas' ? 'Wali Kelas' :
+                         akun.role === 'guru_wali' ? 'Guru Wali' :
+                         akun.role === 'manajemen_bk' || (akun.role as string) === 'bk' ? 'BK' :
+                         akun.role === 'admin' ? 'Administrator' : 'Wali Murid'}
                       </span>
                     </td>
                     <td className="p-3 text-center">
@@ -943,7 +1240,7 @@ export const AdminMasterView: React.FC = () => {
 
             <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 space-y-2.5">
               <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-sm">
-                <CloudCheck className="w-4 h-4 text-emerald-700" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                 <span>Unggah Seluruh Data ke Google Sheets (Push)</span>
               </div>
               <p className="text-slate-600 leading-relaxed text-[11px]">
@@ -1157,20 +1454,181 @@ export const AdminMasterView: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL FORM GURU WALI */}
+      {/* MODAL FORM GURU WALI (TERKONEKSI AKUN PENGGUNA) */}
       {isGuruFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg my-6 overflow-hidden">
             <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm sm:text-base">
-                {editingGuru ? 'Ubah Data Guru Wali' : 'Tambah Guru Wali Baru'}
-              </h3>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base">
+                  {editingGuru ? 'Ubah Data Pendidik & Akun Terkoneksi' : 'Tambah Pendidik & Akun Baru'}
+                </h3>
+                <span className="text-[11px] text-emerald-400 font-semibold block">
+                  Tersambung langsung ke Master Akun Pengguna & Google Sheets
+                </span>
+              </div>
               <button onClick={() => setIsGuruFormOpen(false)} className="text-white/80 hover:text-white cursor-pointer font-bold">
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveGuru} className="p-5 space-y-3 text-xs">
+            <form onSubmit={handleSaveGuru} className="p-5 space-y-3.5 text-xs">
+              {/* Peran / Role Selector */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Peran / Role Pendidik *</label>
+                <select
+                  value={guruFormData.role || 'guru_wali'}
+                  onChange={(e) => {
+                    const r = e.target.value as UserRole;
+                    let defaultK = guruFormData.kelas || '';
+                    let defaultJ = guruFormData.jurusan || '';
+                    let defaultPwd = guruFormData.password || '';
+                    let label = '';
+
+                    if (r === 'kkk') {
+                      defaultJ = defaultJ || DAFTAR_JURUSAN_SMKN1[0];
+                      defaultK = defaultJ;
+                      label = `KKK (Ketua Jurusan ${defaultJ})`;
+                      if (!defaultPwd) defaultPwd = 'kkk123';
+                    } else if (r === 'guru_wali') {
+                      defaultK = uniqueClasses[0] || 'X KKBT';
+                      label = `Guru Wali Kelas ${defaultK}`;
+                      if (!defaultPwd) defaultPwd = 'guru123';
+                    } else if (r === 'wali_kelas') {
+                      defaultK = defaultK && defaultK.includes(',') ? defaultK : 'X KKBT, XI KKBT';
+                      label = 'Wali Kelas';
+                      if (!defaultPwd) defaultPwd = 'guru123';
+                    } else if (r === 'manajemen_bk') {
+                      defaultK = defaultK && defaultK.includes(',') ? defaultK : 'X KKBT, X TL';
+                      label = 'Bimbingan Konseling (BK)';
+                      if (!defaultPwd) defaultPwd = 'bk123';
+                    }
+
+                    setGuruFormData({
+                      ...guruFormData,
+                      role: r,
+                      roleLabel: label,
+                      kelas: defaultK,
+                      jurusan: defaultJ,
+                      password: defaultPwd
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold cursor-pointer focus:outline-blue-600"
+                >
+                  <option value="guru_wali">Guru Wali (Hanya 1 Kelas Saja)</option>
+                  <option value="wali_kelas">Wali Kelas (Mengampu Beberapa Kelas)</option>
+                  <option value="kkk">KKK - Ketua Konsentrasi Keahlian (1 Jurusan)</option>
+                  <option value="manajemen_bk">BK - Bimbingan Konseling (Beberapa Kelas)</option>
+                </select>
+              </div>
+
+              {/* Dynamic Scope Diampu based on role */}
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-800 text-[11px] block">
+                    {guruFormData.role === 'kkk' && '🏢 Jurusan yang Diampu (1 Jurusan) *'}
+                    {guruFormData.role === 'guru_wali' && '🏫 Kelas yang Diampu (Hanya 1 Kelas Saja) *'}
+                    {guruFormData.role === 'wali_kelas' && '📚 Kelas yang Diampu (Bisa Beberapa Kelas) *'}
+                    {guruFormData.role === 'manajemen_bk' && '🛡️ Kelas Binaan BK (Bisa Beberapa Kelas) *'}
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-semibold">
+                    {guruFormData.role === 'kkk' ? '1 Jurusan Penuh' :
+                     guruFormData.role === 'guru_wali' ? 'Single Kelas' : 'Multi-Kelas'}
+                  </span>
+                </div>
+
+                {/* ROLE KKK: Single Jurusan Dropdown */}
+                {guruFormData.role === 'kkk' && (
+                  <div>
+                    <select
+                      value={guruFormData.jurusan || guruFormData.kelas || DAFTAR_JURUSAN_SMKN1[0]}
+                      onChange={(e) => {
+                        const j = e.target.value;
+                        setGuruFormData({
+                          ...guruFormData,
+                          jurusan: j,
+                          kelas: j,
+                          roleLabel: `KKK (Ketua Jurusan ${j})`
+                        });
+                      }}
+                      className="w-full bg-white border border-blue-200 text-blue-900 font-bold rounded-lg p-2 text-xs cursor-pointer focus:outline-blue-600"
+                    >
+                      {DAFTAR_JURUSAN_SMKN1.map(j => (
+                        <option key={j} value={j}>{j}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      KKK mengampu 1 jurusan penuh secara spesifik sesuai kompetensi keahlian.
+                    </p>
+                  </div>
+                )}
+
+                {/* ROLE GURU WALI: Single Kelas Dropdown */}
+                {guruFormData.role === 'guru_wali' && (
+                  <div>
+                    <select
+                      value={guruFormData.kelas || uniqueClasses[0] || 'X KKBT'}
+                      onChange={(e) => {
+                        const newK = e.target.value;
+                        setGuruFormData({
+                          ...guruFormData,
+                          kelas: newK,
+                          roleLabel: `Guru Wali Kelas ${newK}`
+                        });
+                      }}
+                      className="w-full bg-white border border-blue-200 text-blue-900 font-bold rounded-lg p-2 text-xs cursor-pointer focus:outline-blue-600"
+                    >
+                      {uniqueClasses.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Guru Wali hanya diizinkan mengampu tepat 1 kelas binaan karakter saja.
+                    </p>
+                  </div>
+                )}
+
+                {/* ROLE WALI KELAS & BK: Multi-Kelas Input with Chips */}
+                {(guruFormData.role === 'wali_kelas' || guruFormData.role === 'manajemen_bk') && (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={guruFormData.kelas || ''}
+                      onChange={(e) => setGuruFormData({ ...guruFormData, kelas: e.target.value })}
+                      placeholder="Contoh: X KKBT, XI KKBT, XII KKBT"
+                      className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-800"
+                    />
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-500 block font-semibold">
+                        Klik pilihan kelas di bawah untuk tambah/hapus cepat:
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {uniqueClasses.map(c => {
+                          const isSelected = (guruFormData.kelas || '')
+                            .split(',')
+                            .map(x => x.trim())
+                            .includes(c);
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => toggleClassInGuruForm(c)}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-all ${
+                                isSelected
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {isSelected ? `✓ ${c}` : `+ ${c}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="font-bold text-slate-700 block mb-1">NIP *</label>
                 <input
@@ -1178,6 +1636,7 @@ export const AdminMasterView: React.FC = () => {
                   required
                   value={guruFormData.nip}
                   onChange={(e) => setGuruFormData({ ...guruFormData, nip: e.target.value })}
+                  placeholder="Contoh: 19740512 199903 2 004"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono"
                 />
               </div>
@@ -1190,6 +1649,7 @@ export const AdminMasterView: React.FC = () => {
                     required
                     value={guruFormData.nama}
                     onChange={(e) => setGuruFormData({ ...guruFormData, nama: e.target.value })}
+                    placeholder="Nama Lengkap"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
                   />
                 </div>
@@ -1199,6 +1659,7 @@ export const AdminMasterView: React.FC = () => {
                     type="text"
                     value={guruFormData.gelar}
                     onChange={(e) => setGuruFormData({ ...guruFormData, gelar: e.target.value })}
+                    placeholder="M.Pd / S.Pd"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
                   />
                 </div>
@@ -1206,33 +1667,90 @@ export const AdminMasterView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Wali Kelas *</label>
-                  <input
-                    type="text"
-                    required
-                    value={guruFormData.kelas}
-                    onChange={(e) => setGuruFormData({ ...guruFormData, kelas: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
-                  />
-                </div>
-                <div>
                   <label className="font-bold text-slate-700 block mb-1">No Telepon / WhatsApp</label>
                   <input
                     type="text"
-                    value={guruFormData.telepon}
+                    value={guruFormData.telepon || ''}
                     onChange={(e) => setGuruFormData({ ...guruFormData, telepon: e.target.value })}
+                    placeholder="081234567890"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={guruFormData.email || ''}
+                    onChange={(e) => {
+                      const newEmail = e.target.value;
+                      setGuruFormData({
+                        ...guruFormData,
+                        email: newEmail,
+                        username: guruFormData.username || (newEmail.includes('@') ? newEmail.split('@')[0] : guruFormData.username)
+                      });
+                    }}
+                    placeholder="nama@smkn1jember.sch.id"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
                   />
                 </div>
               </div>
 
+              {/* SECTION: Akun Pengguna Terkoneksi Otomatis */}
+              <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/50 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-blue-900 font-extrabold text-xs">
+                  <KeyRound className="w-3.5 h-3.5 text-blue-700" />
+                  <span>Akun Pengguna Terkoneksi (Sinkronisasi Otomatis)</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1 text-[11px]">Username Login *</label>
+                    <input
+                      type="text"
+                      required
+                      value={guruFormData.username || ''}
+                      onChange={(e) => setGuruFormData({ ...guruFormData, username: e.target.value })}
+                      placeholder="Username login"
+                      className="w-full bg-white border border-blue-200 rounded-lg p-2 font-mono font-bold text-blue-950 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1 text-[11px]">Kata Sandi *</label>
+                    <input
+                      type="text"
+                      required
+                      value={guruFormData.password || ''}
+                      onChange={(e) => setGuruFormData({ ...guruFormData, password: e.target.value })}
+                      placeholder="Sandi login"
+                      className="w-full bg-white border border-blue-200 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1 text-[11px]">Status Akun</label>
+                    <select
+                      value={guruFormData.statusAkun || 'Aktif'}
+                      onChange={(e) => setGuruFormData({ ...guruFormData, statusAkun: e.target.value as any })}
+                      className="w-full bg-white border border-blue-200 rounded-lg p-2 font-bold text-xs cursor-pointer"
+                    >
+                      <option value="Aktif">Aktif</option>
+                      <option value="Nonaktif">Nonaktif</option>
+                    </select>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-blue-700 leading-tight">
+                  💡 Menyimpan pendidik ini otomatis membuat atau memperbarui akun login pada Master Akun dan Google Sheets.
+                </p>
+              </div>
+
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Program Keahlian / Jurusan</label>
-                <input
-                  type="text"
-                  value={guruFormData.jurusan}
-                  onChange={(e) => setGuruFormData({ ...guruFormData, jurusan: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
+                <label className="font-bold text-slate-700 block mb-1">Catatan / Bio Singkat</label>
+                <textarea
+                  rows={2}
+                  value={guruFormData.bio || ''}
+                  onChange={(e) => setGuruFormData({ ...guruFormData, bio: e.target.value })}
+                  placeholder="Catatan penugasan pendidik di SMKN 1 Jember..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs"
                 />
               </div>
 
@@ -1248,7 +1766,7 @@ export const AdminMasterView: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-xl cursor-pointer"
                 >
-                  Simpan Guru Wali
+                  Simpan Pendidik & Akun
                 </button>
               </div>
             </form>
@@ -1331,30 +1849,59 @@ export const AdminMasterView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Role / Peran</label>
+                  <label className="font-bold text-slate-700 block mb-1">Role / Peran *</label>
                   <select
                     value={akunFormData.role}
                     onChange={(e) => {
-                      const r = e.target.value as any;
-                      const labelMap: any = {
-                        admin: 'Super Administrator',
-                        guru_wali: 'Guru Wali',
-                        manajemen_bk: 'BK & Kesiswaan',
-                        wali_murid: 'Wali Murid'
-                      };
-                      const defaultK = r === 'admin' ? 'Semua Kelas' : r === 'guru_wali' ? 'X KKBT' : r === 'manajemen_bk' ? 'Semua Kelas X' : 'X KKBT';
+                      const r = e.target.value as UserRole;
+                      let defaultK = akunFormData.kelas || '';
+                      let defaultJ = akunFormData.jurusan || '';
+                      let defaultPwd = akunFormData.password || '';
+                      let label = '';
+
+                      if (r === 'kkk') {
+                        defaultJ = defaultJ || DAFTAR_JURUSAN_SMKN1[0];
+                        defaultK = defaultJ;
+                        label = `KKK (Ketua Jurusan ${defaultJ})`;
+                        if (!defaultPwd) defaultPwd = 'kkk123';
+                      } else if (r === 'guru_wali') {
+                        defaultK = uniqueClasses[0] || 'X KKBT';
+                        label = `Guru Wali Kelas ${defaultK}`;
+                        if (!defaultPwd) defaultPwd = 'guru123';
+                      } else if (r === 'wali_kelas') {
+                        defaultK = defaultK && defaultK.includes(',') ? defaultK : 'X KKBT, XI KKBT';
+                        label = 'Wali Kelas';
+                        if (!defaultPwd) defaultPwd = 'guru123';
+                      } else if (r === 'manajemen_bk') {
+                        defaultK = defaultK && defaultK.includes(',') ? defaultK : 'X KKBT, X TL';
+                        label = 'Bimbingan Konseling (BK)';
+                        if (!defaultPwd) defaultPwd = 'bk123';
+                      } else if (r === 'admin') {
+                        defaultK = 'Semua Kelas';
+                        label = 'Super Administrator';
+                        if (!defaultPwd) defaultPwd = 'admin123';
+                      } else if (r === 'wali_murid') {
+                        defaultK = uniqueClasses[0] || 'X KKBT';
+                        label = 'Wali Murid';
+                        if (!defaultPwd) defaultPwd = 'ortu123';
+                      }
+
                       setAkunFormData({
                         ...akunFormData,
                         role: r,
-                        roleLabel: labelMap[r],
-                        kelas: akunFormData.kelas || defaultK
+                        roleLabel: label,
+                        kelas: defaultK,
+                        jurusan: defaultJ,
+                        password: defaultPwd
                       });
                     }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold cursor-pointer"
                   >
-                    <option value="admin">Administrator</option>
-                    <option value="guru_wali">Guru Wali</option>
-                    <option value="manajemen_bk">BK & Kesiswaan</option>
+                    <option value="guru_wali">Guru Wali (1 Kelas Saja)</option>
+                    <option value="wali_kelas">Wali Kelas (Beberapa Kelas)</option>
+                    <option value="manajemen_bk">BK (Beberapa Kelas)</option>
+                    <option value="kkk">KKK (1 Jurusan)</option>
+                    <option value="admin">Administrator (Semua Kelas)</option>
                     <option value="wali_murid">Wali Murid</option>
                   </select>
                 </div>
@@ -1364,7 +1911,7 @@ export const AdminMasterView: React.FC = () => {
                   <select
                     value={akunFormData.status}
                     onChange={(e) => setAkunFormData({ ...akunFormData, status: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold cursor-pointer"
                   >
                     <option value="Aktif">Aktif</option>
                     <option value="Nonaktif">Nonaktif</option>
@@ -1372,16 +1919,56 @@ export const AdminMasterView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Kelas yang Diampu Section */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    {akunFormData.role === 'guru_wali' ? 'Kelas yang Diampu *' :
-                     akunFormData.role === 'wali_murid' ? 'Kelas Siswa (Binaan)' : 'Lingkup Kelas'}
+              {/* Dynamic Scope Diampu based on role */}
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-800 text-[11px] block">
+                    {akunFormData.role === 'kkk' && '🏢 Jurusan yang Diampu (1 Jurusan Saja) *'}
+                    {akunFormData.role === 'guru_wali' && '🏫 Kelas yang Diampu (Hanya 1 Kelas Saja) *'}
+                    {akunFormData.role === 'wali_kelas' && '📚 Kelas yang Diampu (Beberapa Kelas) *'}
+                    {akunFormData.role === 'manajemen_bk' && '🛡️ Kelas Binaan BK (Beberapa Kelas) *'}
+                    {akunFormData.role === 'admin' && '👑 Lingkup Administrator'}
+                    {akunFormData.role === 'wali_murid' && '👨‍👧 Kelas Siswa Binaan'}
                   </label>
-                  {akunFormData.role === 'guru_wali' ? (
+                  <span className="text-[10px] text-slate-500 font-semibold">
+                    {akunFormData.role === 'kkk' ? '1 Jurusan Penuh' :
+                     akunFormData.role === 'guru_wali' ? 'Single Kelas' :
+                     akunFormData.role === 'wali_kelas' ? 'Multi-Kelas' :
+                     akunFormData.role === 'manajemen_bk' ? 'Multi-Kelas' : 'Akses Penuh'}
+                  </span>
+                </div>
+
+                {/* ROLE KKK: Single Jurusan Dropdown */}
+                {akunFormData.role === 'kkk' && (
+                  <div>
                     <select
-                      value={akunFormData.kelas || 'X KKBT'}
+                      value={akunFormData.jurusan || akunFormData.kelas || DAFTAR_JURUSAN_SMKN1[0]}
+                      onChange={(e) => {
+                        const j = e.target.value;
+                        setAkunFormData({
+                          ...akunFormData,
+                          jurusan: j,
+                          kelas: j,
+                          roleLabel: `KKK (Ketua Jurusan ${j})`
+                        });
+                      }}
+                      className="w-full bg-white border border-blue-200 text-blue-900 font-bold rounded-lg p-2 text-xs cursor-pointer focus:outline-blue-600"
+                    >
+                      {DAFTAR_JURUSAN_SMKN1.map(j => (
+                        <option key={j} value={j}>{j}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      KKK mengampu 1 jurusan penuh secara spesifik sesuai kompetensi keahlian.
+                    </p>
+                  </div>
+                )}
+
+                {/* ROLE GURU WALI: Single Kelas Dropdown */}
+                {akunFormData.role === 'guru_wali' && (
+                  <div>
+                    <select
+                      value={akunFormData.kelas || uniqueClasses[0] || 'X KKBT'}
                       onChange={(e) => {
                         const newK = e.target.value;
                         setAkunFormData({
@@ -1390,23 +1977,80 @@ export const AdminMasterView: React.FC = () => {
                           roleLabel: `Guru Wali Kelas ${newK}`
                         });
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold text-blue-900"
+                      className="w-full bg-white border border-blue-200 text-blue-900 font-bold rounded-lg p-2 text-xs cursor-pointer focus:outline-blue-600"
                     >
                       {uniqueClasses.map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
-                  ) : (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Guru Wali hanya diizinkan mengampu tepat 1 kelas binaan karakter saja.
+                    </p>
+                  </div>
+                )}
+
+                {/* ROLE WALI KELAS & BK: Multi-Kelas Input with Chips */}
+                {(akunFormData.role === 'wali_kelas' || akunFormData.role === 'manajemen_bk') && (
+                  <div className="space-y-2">
                     <input
                       type="text"
-                      value={akunFormData.kelas || (akunFormData.role === 'admin' ? 'Semua Kelas' : 'Semua Kelas X')}
+                      value={akunFormData.kelas || ''}
                       onChange={(e) => setAkunFormData({ ...akunFormData, kelas: e.target.value })}
-                      placeholder="Contoh: X KKBT atau Semua Kelas"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-bold"
+                      placeholder="Contoh: X KKBT, XI KKBT, XII KKBT"
+                      className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-800"
                     />
-                  )}
-                </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-500 block font-semibold">
+                        Klik pilihan kelas di bawah untuk tambah/hapus cepat:
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {uniqueClasses.map(c => {
+                          const isSelected = (akunFormData.kelas || '')
+                            .split(',')
+                            .map(x => x.trim())
+                            .includes(c);
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => toggleClassInAkunForm(c)}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-all ${
+                                isSelected
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {isSelected ? `✓ ${c}` : `+ ${c}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
+                {/* ROLE ADMIN */}
+                {akunFormData.role === 'admin' && (
+                  <div className="bg-slate-100 p-2 rounded-lg text-slate-700 text-xs font-semibold">
+                    Semua Kelas & Seluruh Jurusan (Super Administrator SMKN 1 Jember)
+                  </div>
+                )}
+
+                {/* ROLE WALI MURID */}
+                {akunFormData.role === 'wali_murid' && (
+                  <select
+                    value={akunFormData.kelas || uniqueClasses[0] || 'X KKBT'}
+                    onChange={(e) => setAkunFormData({ ...akunFormData, kelas: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold"
+                  >
+                    {uniqueClasses.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Kontak Telepon / WA</label>
                   <input
@@ -1417,17 +2061,16 @@ export const AdminMasterView: React.FC = () => {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Email</label>
-                <input
-                  type="email"
-                  value={akunFormData.email}
-                  onChange={(e) => setAkunFormData({ ...akunFormData, email: e.target.value })}
-                  placeholder="nama@smkn1jember.sch.id"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
-                />
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={akunFormData.email || ''}
+                    onChange={(e) => setAkunFormData({ ...akunFormData, email: e.target.value })}
+                    placeholder="nama@smkn1jember.sch.id"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2"
+                  />
+                </div>
               </div>
 
               <div>

@@ -31,6 +31,7 @@ export function deduplicateAccounts(accounts: UserAccount[]): UserAccount[] {
         nama: raw.nama || existing.nama,
         password: raw.password || existing.password,
         kelas: raw.kelas || existing.kelas,
+        jurusan: raw.jurusan || existing.jurusan,
         email: raw.email || existing.email,
         role: raw.role || existing.role,
         roleLabel: raw.roleLabel || existing.roleLabel,
@@ -62,12 +63,21 @@ export function deduplicateAccounts(accounts: UserAccount[]): UserAccount[] {
 
     seenIds.add(finalId);
 
+    const r = account.role || 'guru_wali';
+    let defaultLabel = 'Pengguna';
+    if (r === 'admin') defaultLabel = 'Super Administrator';
+    else if (r === 'kkk') defaultLabel = `KKK Jurusan ${account.jurusan || account.kelas || ''}`.trim();
+    else if (r === 'wali_kelas') defaultLabel = `Wali Kelas ${account.kelas || ''}`.trim();
+    else if (r === 'bk' || r === 'manajemen_bk') defaultLabel = `BK & Kesiswaan (${account.kelas || 'Beberapa Kelas'})`;
+    else if (r === 'guru_wali') defaultLabel = `Guru Wali Kelas ${account.kelas || ''}`.trim();
+    else if (r === 'wali_murid') defaultLabel = `Wali Murid ${account.kelas || ''}`.trim();
+
     result.push({
       ...account,
       id: finalId,
       status: account.status === 'Nonaktif' ? 'Nonaktif' : 'Aktif',
-      role: account.role || 'guru_wali',
-      roleLabel: account.roleLabel || (account.role === 'admin' ? 'Super Administrator' : account.role === 'guru_wali' ? `Guru Wali ${account.kelas || ''}`.trim() : 'Pengguna')
+      role: r,
+      roleLabel: account.roleLabel || defaultLabel
     });
   });
 

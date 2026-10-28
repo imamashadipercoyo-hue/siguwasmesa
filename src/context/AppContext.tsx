@@ -429,17 +429,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let isValidPassword = false;
     const defaultRolePassword = (
       matchedAccount.role === 'admin' ? 'admin123' :
-      matchedAccount.role === 'guru_wali' ? 'guru123' :
-      matchedAccount.role === 'manajemen_bk' ? 'bk123' : '123456'
+      matchedAccount.role === 'kkk' ? 'kkk123' :
+      matchedAccount.role === 'guru_wali' || matchedAccount.role === 'wali_kelas' ? 'guru123' :
+      matchedAccount.role === 'manajemen_bk' || matchedAccount.role === 'bk' ? 'bk123' : '123456'
     );
 
     if (cleanPass === matchedAccount.password || cleanPass === defaultRolePassword) {
       isValidPassword = true;
     } else if (matchedAccount.role === 'admin' && (cleanPass === 'admin' || cleanPass === 'admin123')) {
       isValidPassword = true;
-    } else if (matchedAccount.role === 'guru_wali' && (cleanPass === 'guru123' || cleanPass === '123456')) {
+    } else if (matchedAccount.role === 'kkk' && (cleanPass === 'kkk123' || cleanPass === 'guru123' || cleanPass === '123456')) {
       isValidPassword = true;
-    } else if (matchedAccount.role === 'manajemen_bk' && (cleanPass === 'bk123' || cleanPass === '123456')) {
+    } else if ((matchedAccount.role === 'guru_wali' || matchedAccount.role === 'wali_kelas') && (cleanPass === 'guru123' || cleanPass === '123456')) {
+      isValidPassword = true;
+    } else if ((matchedAccount.role === 'manajemen_bk' || matchedAccount.role === 'bk') && (cleanPass === 'bk123' || cleanPass === '123456')) {
       isValidPassword = true;
     } else if (matchedAccount.role === 'wali_murid') {
       const matchSiswa = siswaList.find(s => s.id === matchedAccount?.linkedId || s.nisn === matchedAccount?.username);
@@ -605,18 +608,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Guru Wali
       if (Array.isArray(result.data.guruWali) && result.data.guruWali.length > 0) {
-        const normalizedGuru: GuruWali[] = result.data.guruWali.map((g: any, idx: number) => ({
-          id: String(g.id && String(g.id).trim() ? g.id : `gw-${Date.now()}-${idx}`),
-          nip: String(g.nip || '').replace(/^'/, ''),
-          nama: String(g.nama || ''),
-          gelar: String(g.gelar || ''),
-          kelas: String(g.kelas || 'X KKBT'),
-          jurusan: String(g.jurusan || ''),
-          telepon: g.telepon !== undefined && g.telepon !== null ? String(g.telepon).replace(/^'/, '') : '',
-          email: String(g.email || ''),
-          avatar: String(g.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'),
-          bio: String(g.bio || '')
-        }));
+        const normalizedGuru: GuruWali[] = result.data.guruWali.map((g: any, idx: number) => {
+          const rawRole = String(g.role || g['Peran / Role'] || 'guru_wali').toLowerCase();
+          let r: UserRole = 'guru_wali';
+          if (rawRole.includes('kkk') || rawRole.includes('jurusan')) r = 'kkk';
+          else if (rawRole.includes('wali_kelas') || rawRole.includes('walikelas') || (g.kelas && String(g.kelas).includes(','))) r = 'wali_kelas';
+          else if (rawRole.includes('bk') || rawRole.includes('konseling') || rawRole.includes('kesiswaan')) r = 'manajemen_bk';
+
+          return {
+            id: String(g.id && String(g.id).trim() ? g.id : `gw-${Date.now()}-${idx}`),
+            nip: String(g.nip || '').replace(/^'/, ''),
+            nama: String(g.nama || ''),
+            gelar: String(g.gelar || ''),
+            kelas: String(g.kelas || 'X KKBT'),
+            jurusan: String(g.jurusan || ''),
+            telepon: g.telepon !== undefined && g.telepon !== null ? String(g.telepon).replace(/^'/, '') : '',
+            email: String(g.email || ''),
+            avatar: String(g.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'),
+            bio: String(g.bio || ''),
+            role: r,
+            roleLabel: String(g.roleLabel || (r === 'kkk' ? 'KKK (Ketua Jurusan)' : r === 'wali_kelas' ? 'Wali Kelas' : r === 'manajemen_bk' ? 'BK' : 'Guru Wali')),
+            username: g.username ? String(g.username).replace(/^'/, '') : undefined,
+            password: g.password ? String(g.password) : undefined,
+            statusAkun: (String(g.statusAkun || g.status || '').toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif') as 'Aktif' | 'Nonaktif'
+          };
+        });
         setGuruWaliList(normalizedGuru);
       }
 
@@ -628,6 +644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           password: a.password ? String(a.password) : undefined,
           nama: String(a.nama || ''),
           kelas: a.kelas ? String(a.kelas) : undefined,
+          jurusan: a.jurusan ? String(a.jurusan) : (a.role === 'kkk' && a.kelas ? String(a.kelas) : undefined),
           email: String(a.email || ''),
           role: (a.role || 'guru_wali') as any,
           roleLabel: String(a.roleLabel || 'Guru Wali'),
@@ -827,13 +844,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerAutoPushIfEnabled();
   };
 
-  // Master Guru Wali CRUD
+  // Master Guru Wali CRUD (Terkoneksi Otomatis dengan Master Akun Pengguna)
   const addGuruWali = (guru: Omit<GuruWali, 'id'>) => {
+    const newId = `gw-${Date.now()}`;
     const newEntry: GuruWali = {
       ...guru,
-      id: `gw-${Date.now()}`
+      id: newId
     };
+
+    // 1. Simpan ke guruWaliList
     setGuruWaliList(prev => [...prev, newEntry]);
+
+    // 2. Buat atau Sinkronkan Akun Pengguna terkait secara otomatis
+    const rawRole = newEntry.role || 'guru_wali';
+    const role: UserRole = rawRole === ('bk' as any) ? 'manajemen_bk' : rawRole;
+    const cleanUsername = (newEntry.username || (newEntry.email ? newEntry.email.split('@')[0] : newEntry.nip.replace(/\s+/g, ''))).toLowerCase().trim() || `guru.${newId}`;
+    const password = newEntry.password || (role === 'kkk' ? 'kkk123' : role === 'manajemen_bk' ? 'bk123' : 'guru123');
+
+    let defaultLabel = newEntry.roleLabel;
+    if (!defaultLabel) {
+      if (role === 'kkk') defaultLabel = `Ketua Konsentrasi Keahlian (KKK) ${newEntry.jurusan || newEntry.kelas}`;
+      else if (role === 'wali_kelas') defaultLabel = `Wali Kelas ${newEntry.kelas}`;
+      else if (role === 'manajemen_bk') defaultLabel = `Guru BK & Konselor`;
+      else defaultLabel = `Guru Wali Kelas ${newEntry.kelas}`;
+    }
+
+    const newAkun: UserAccount = {
+      id: `usr-${newId}`,
+      username: cleanUsername,
+      password,
+      nama: `${newEntry.nama}${newEntry.gelar ? ', ' + newEntry.gelar : ''}`.trim(),
+      email: newEntry.email || `${cleanUsername}@smkn1jember.sch.id`,
+      role,
+      roleLabel: defaultLabel,
+      kelas: newEntry.kelas,
+      jurusan: role === 'kkk' ? (newEntry.jurusan || newEntry.kelas) : newEntry.jurusan,
+      status: (newEntry.statusAkun || 'Aktif') as 'Aktif' | 'Nonaktif',
+      linkedId: newId,
+      telepon: newEntry.telepon
+    };
+
+    setAkunList(prev => {
+      const matchIdx = prev.findIndex(a =>
+        a.linkedId === newId ||
+        a.username.toLowerCase() === cleanUsername.toLowerCase() ||
+        (newEntry.email && a.email && a.email.toLowerCase() === newEntry.email.toLowerCase())
+      );
+      if (matchIdx >= 0) {
+        const copy = [...prev];
+        copy[matchIdx] = { ...copy[matchIdx], ...newAkun };
+        return copy;
+      }
+      return [newAkun, ...prev];
+    });
+
     triggerAutoPushIfEnabled();
   };
 
@@ -842,11 +906,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentGuruWali.id === id) {
       setCurrentGuruWaliState(prev => ({ ...prev, ...updates }));
     }
+
+    // Sinkronisasi otomatis ke Akun Pengguna terkait
+    setAkunList(prev => {
+      const matchIdx = prev.findIndex(a =>
+        a.linkedId === id ||
+        (updates.email && a.email && a.email.toLowerCase() === updates.email.toLowerCase()) ||
+        (updates.username && a.username && a.username.toLowerCase() === updates.username.toLowerCase())
+      );
+
+      const rawRole = updates.role || (matchIdx >= 0 ? prev[matchIdx].role : 'guru_wali');
+      const role: UserRole = rawRole === ('bk' as any) ? 'manajemen_bk' : rawRole;
+      const namaLengkap = updates.nama
+        ? `${updates.nama}${updates.gelar ? ', ' + updates.gelar : ''}`.trim()
+        : (matchIdx >= 0 ? prev[matchIdx].nama : '');
+
+      if (matchIdx >= 0) {
+        const copy = [...prev];
+        const existing = copy[matchIdx];
+        copy[matchIdx] = {
+          ...existing,
+          ...(namaLengkap ? { nama: namaLengkap } : {}),
+          ...(updates.email ? { email: updates.email } : {}),
+          ...(updates.telepon ? { telepon: updates.telepon } : {}),
+          ...(updates.kelas ? { kelas: updates.kelas } : {}),
+          ...(updates.jurusan ? { jurusan: updates.jurusan } : {}),
+          ...(updates.username ? { username: updates.username } : {}),
+          ...(updates.password ? { password: updates.password } : {}),
+          ...(updates.statusAkun ? { status: updates.statusAkun } : {}),
+          role,
+          roleLabel: updates.roleLabel || existing.roleLabel,
+          linkedId: id
+        };
+        return copy;
+      } else {
+        const username = (updates.username || (updates.email ? updates.email.split('@')[0] : id)).toLowerCase().trim();
+        const newAcc: UserAccount = {
+          id: `usr-${id}`,
+          username,
+          password: updates.password || (role === 'kkk' ? 'kkk123' : role === 'manajemen_bk' ? 'bk123' : 'guru123'),
+          nama: namaLengkap || 'Guru Wali SMKN 1 Jember',
+          email: updates.email || `${username}@smkn1jember.sch.id`,
+          role,
+          roleLabel: updates.roleLabel || 'Guru Wali',
+          kelas: updates.kelas || 'X KKBT',
+          jurusan: updates.jurusan,
+          status: (updates.statusAkun || 'Aktif') as 'Aktif' | 'Nonaktif',
+          linkedId: id,
+          telepon: updates.telepon
+        };
+        return [newAcc, ...prev];
+      }
+    });
+
     triggerAutoPushIfEnabled();
   };
 
   const deleteGuruWali = (id: string) => {
     setGuruWaliList(prev => prev.filter(g => g.id !== id));
+    setAkunList(prev => prev.filter(a => a.linkedId !== id));
     triggerAutoPushIfEnabled();
   };
 
@@ -860,26 +978,170 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return [...prev, ...toAdd];
       });
     }
+
+    // Pastikan semua akun pendidik yang diimpor juga ada di Akun Pengguna
+    setAkunList(prev => {
+      const copy = [...prev];
+      newList.forEach(guru => {
+        const rawRole = guru.role || 'guru_wali';
+        const role: UserRole = rawRole === ('bk' as any) ? 'manajemen_bk' : rawRole;
+        const cleanUsername = (guru.username || (guru.email ? guru.email.split('@')[0] : guru.nip.replace(/\s+/g, ''))).toLowerCase().trim() || `guru.${guru.id}`;
+        const matchIdx = copy.findIndex(a =>
+          a.linkedId === guru.id ||
+          a.username.toLowerCase() === cleanUsername.toLowerCase() ||
+          (guru.email && a.email && a.email.toLowerCase() === guru.email.toLowerCase())
+        );
+
+        const defaultLabel = guru.roleLabel || (
+          role === 'kkk' ? `Ketua Konsentrasi Keahlian (KKK) ${guru.jurusan || guru.kelas}` :
+          role === 'wali_kelas' ? `Wali Kelas ${guru.kelas}` :
+          role === 'manajemen_bk' ? `Guru BK & Konselor` : `Guru Wali Kelas ${guru.kelas}`
+        );
+
+        const accData: UserAccount = {
+          id: `usr-${guru.id}`,
+          username: cleanUsername,
+          password: guru.password || (role === 'kkk' ? 'kkk123' : role === 'manajemen_bk' ? 'bk123' : 'guru123'),
+          nama: `${guru.nama}${guru.gelar ? ', ' + guru.gelar : ''}`.trim(),
+          email: guru.email || `${cleanUsername}@smkn1jember.sch.id`,
+          role,
+          roleLabel: defaultLabel,
+          kelas: guru.kelas,
+          jurusan: role === 'kkk' ? (guru.jurusan || guru.kelas) : guru.jurusan,
+          status: (guru.statusAkun || 'Aktif') as 'Aktif' | 'Nonaktif',
+          linkedId: guru.id,
+          telepon: guru.telepon
+        };
+
+        if (matchIdx >= 0) {
+          copy[matchIdx] = { ...copy[matchIdx], ...accData };
+        } else {
+          copy.push(accData);
+        }
+      });
+      return copy;
+    });
+
     triggerAutoPushIfEnabled();
   };
 
-  // Master Akun CRUD
+  // Master Akun CRUD (Sinkronisasi Balik ke Guru Wali jika peran pendidik)
   const addAkun = (akun: Omit<UserAccount, 'id'>) => {
+    const newId = `usr-${Date.now()}`;
     const newEntry: UserAccount = {
       ...akun,
-      id: `usr-${Date.now()}`
+      id: newId
     };
     setAkunList(prev => [newEntry, ...prev]);
+
+    // Sinkronkan ke GuruWali jika peran pendidik
+    const isTeacher = ['guru_wali', 'wali_kelas', 'kkk', 'manajemen_bk', 'bk'].includes(newEntry.role);
+    if (isTeacher) {
+      setGuruWaliList(prev => {
+        const matchIdx = prev.findIndex(g =>
+          (newEntry.linkedId && g.id === newEntry.linkedId) ||
+          (newEntry.email && g.email && g.email.toLowerCase() === newEntry.email.toLowerCase()) ||
+          (g.username && g.username.toLowerCase() === newEntry.username.toLowerCase())
+        );
+
+        const cleanRole: UserRole = (newEntry.role === ('bk' as any) ? 'manajemen_bk' : newEntry.role) as UserRole;
+
+        if (matchIdx >= 0) {
+          const copy = [...prev];
+          copy[matchIdx] = {
+            ...copy[matchIdx],
+            nama: newEntry.nama.split(',')[0].trim(),
+            gelar: newEntry.nama.includes(',') ? newEntry.nama.split(',').slice(1).join(',').trim() : copy[matchIdx].gelar,
+            kelas: newEntry.kelas || copy[matchIdx].kelas,
+            jurusan: newEntry.jurusan || copy[matchIdx].jurusan,
+            role: cleanRole,
+            roleLabel: newEntry.roleLabel,
+            username: newEntry.username,
+            password: newEntry.password,
+            statusAkun: newEntry.status,
+            email: newEntry.email || copy[matchIdx].email,
+            telepon: newEntry.telepon || copy[matchIdx].telepon
+          };
+          return copy;
+        } else {
+          const newGwId = newEntry.linkedId || `gw-${Date.now()}`;
+          const newGw: GuruWali = {
+            id: newGwId,
+            nip: /^\d+$/.test(newEntry.username) ? newEntry.username : `19850101 201001 1 ${Math.floor(100 + Math.random() * 900)}`,
+            nama: newEntry.nama.split(',')[0].trim(),
+            gelar: newEntry.nama.includes(',') ? newEntry.nama.split(',').slice(1).join(',').trim() : 'S.Pd',
+            kelas: newEntry.kelas || 'X KKBT',
+            jurusan: newEntry.jurusan || (cleanRole === 'kkk' ? newEntry.kelas || 'Kriya Kreatif Batik dan Tekstil' : 'Teknik Kejuruan'),
+            telepon: newEntry.telepon || '081234567890',
+            email: newEntry.email,
+            avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+            bio: `${newEntry.roleLabel || 'Pendidik'} SMKN 1 Jember.`,
+            role: cleanRole,
+            roleLabel: newEntry.roleLabel,
+            username: newEntry.username,
+            password: newEntry.password,
+            statusAkun: newEntry.status
+          };
+          return [...prev, newGw];
+        }
+      });
+    }
+
     triggerAutoPushIfEnabled();
   };
 
   const updateAkun = (id: string, updates: Partial<UserAccount>) => {
     setAkunList(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+
+    // Sinkronkan ke GuruWali jika akun terkait pendidik
+    const currentAcc = akunList.find(a => a.id === id);
+    const effectiveRole = (updates.role || (currentAcc ? currentAcc.role : 'guru_wali')) as UserRole;
+    const isTeacher = ['guru_wali', 'wali_kelas', 'kkk', 'manajemen_bk', 'bk'].includes(effectiveRole);
+
+    if (isTeacher) {
+      setGuruWaliList(prev => {
+        const matchIdx = prev.findIndex(g =>
+          (currentAcc?.linkedId && g.id === currentAcc.linkedId) ||
+          (g.id === id) ||
+          (currentAcc?.email && g.email && g.email.toLowerCase() === currentAcc.email.toLowerCase()) ||
+          (updates.email && g.email && g.email.toLowerCase() === updates.email.toLowerCase()) ||
+          (g.username && currentAcc?.username && g.username.toLowerCase() === currentAcc.username.toLowerCase())
+        );
+
+        if (matchIdx >= 0) {
+          const copy = [...prev];
+          const existing = copy[matchIdx];
+          copy[matchIdx] = {
+            ...existing,
+            ...(updates.nama ? {
+              nama: updates.nama.split(',')[0].trim(),
+              gelar: updates.nama.includes(',') ? updates.nama.split(',').slice(1).join(',').trim() : existing.gelar
+            } : {}),
+            ...(updates.kelas ? { kelas: updates.kelas } : {}),
+            ...(updates.jurusan ? { jurusan: updates.jurusan } : {}),
+            ...(updates.email ? { email: updates.email } : {}),
+            ...(updates.telepon ? { telepon: updates.telepon } : {}),
+            ...(updates.username ? { username: updates.username } : {}),
+            ...(updates.password ? { password: updates.password } : {}),
+            ...(updates.status ? { statusAkun: updates.status } : {}),
+            role: effectiveRole,
+            roleLabel: updates.roleLabel || existing.roleLabel
+          };
+          return copy;
+        }
+        return prev;
+      });
+    }
+
     triggerAutoPushIfEnabled();
   };
 
   const deleteAkun = (id: string) => {
+    const target = akunList.find(a => a.id === id);
     setAkunList(prev => prev.filter(a => a.id !== id));
+    if (target?.linkedId) {
+      setGuruWaliList(prev => prev.filter(g => g.id !== target.linkedId));
+    }
     triggerAutoPushIfEnabled();
   };
 

@@ -11,7 +11,12 @@ export const INITIAL_GURU_WALI: GuruWali[] = [
     telepon: '081234567890',
     email: 'endang.sulistiyowati@smkn1jember.sch.id',
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    bio: 'Guru Wali Kelas X Kriya Kreatif Batik dan Tekstil (X KKBT) SMKN 1 Jember. Berkomitmen mendampingi kreativitas seni kriya, etika berkarya, dan pembentukan Profil Pelajar Pancasila.'
+    bio: 'Guru Wali Kelas X Kriya Kreatif Batik dan Tekstil (X KKBT) SMKN 1 Jember. Berkomitmen mendampingi kreativitas seni kriya, etika berkarya, dan pembentukan Profil Pelajar Pancasila.',
+    role: 'guru_wali',
+    roleLabel: 'Guru Wali Kelas X KKBT',
+    username: 'endang.sulistiyowati',
+    password: 'guru123',
+    statusAkun: 'Aktif'
   },
   {
     id: 'gw-2',
@@ -23,31 +28,80 @@ export const INITIAL_GURU_WALI: GuruWali[] = [
     telepon: '081398765432',
     email: 'ahmad.fauzi@smkn1jember.sch.id',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    bio: 'Guru Wali Kelas X Teknik Logistik (X TL) SMKN 1 Jember. Fokus pada kedisiplinan operasional industri, manajemen pergudangan, rantai pasok, dan etika kerja logistik modern.'
+    bio: 'Guru Wali Kelas X Teknik Logistik (X TL) SMKN 1 Jember. Fokus pada kedisiplinan operasional industri, manajemen pergudangan, rantai pasok, dan etika kerja logistik modern.',
+    role: 'guru_wali',
+    roleLabel: 'Guru Wali Kelas X TL',
+    username: 'ahmad.fauzi',
+    password: 'guru123',
+    statusAkun: 'Aktif'
   },
   {
     id: 'gw-3',
     nip: '19790321 200501 2 008',
     nama: 'Sri Wahyuni',
     gelar: 'S.E., M.M',
-    kelas: 'X KKBT',
+    kelas: 'X KKBT, X TL',
     jurusan: 'Koordinator BK & Karakter Kelas X',
     telepon: '081567891234',
     email: 'sri.wahyuni@smkn1jember.sch.id',
     avatar: 'https://images.unsplash.com/photo-1580894732444-8ecded7900cd?w=150&auto=format&fit=crop&q=80',
-    bio: 'Guru Pendamping Khusus & Bimbingan Konseling Kelas X SMKN 1 Jember. Mengawal penanganan masalah psikososial, mediasi orang tua, dan motivasi berprestasi.'
+    bio: 'Guru Pendamping Khusus & Bimbingan Konseling Kelas X SMKN 1 Jember. Mengawal penanganan masalah psikososial, mediasi orang tua, dan motivasi berprestasi.',
+    role: 'manajemen_bk',
+    roleLabel: 'Koordinator Guru BK',
+    username: 'sri.wahyuni',
+    password: 'bk123',
+    statusAkun: 'Aktif'
   },
   {
     id: 'gw-4',
     nip: '19851104 201101 1 007',
     nama: 'Bambang Supriyadi',
     gelar: 'S.Pd',
-    kelas: 'X TL',
+    kelas: 'Semua Kelas X',
     jurusan: 'Pembina Kesiswaan Kelas X',
     telepon: '081298712345',
     email: 'bambang.supriyadi@smkn1jember.sch.id',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    bio: 'Guru Wali & Pembina Kesiswaan Tingkat Kelas X. Mengawal ketertiban tata tertib sekolah, penegakan kedisiplinan seragam, dan program anti-bullying.'
+    bio: 'Guru Wali & Pembina Kesiswaan Tingkat Kelas X. Mengawal ketertiban tata tertib sekolah, penegakan kedisiplinan seragam, dan program anti-bullying.',
+    role: 'manajemen_bk',
+    roleLabel: 'Pembina Kesiswaan Kelas X',
+    username: 'bambang.supriyadi',
+    password: 'bk123',
+    statusAkun: 'Aktif'
+  },
+  {
+    id: 'gw-5',
+    nip: '19760914 200212 1 003',
+    nama: 'Drs. H. Mulyadi',
+    gelar: 'M.Pd',
+    kelas: 'Kriya Kreatif Batik dan Tekstil',
+    jurusan: 'Kriya Kreatif Batik dan Tekstil',
+    telepon: '081333445566',
+    email: 'mulyadi.kkk@smkn1jember.sch.id',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+    bio: 'Ketua Konsentrasi Keahlian (KKK) Kriya Kreatif Batik dan Tekstil SMKN 1 Jember.',
+    role: 'kkk',
+    roleLabel: 'Ketua Konsentrasi Keahlian (KKK) KKBT',
+    username: 'mulyadi.kkk',
+    password: 'kkk123',
+    statusAkun: 'Aktif'
+  },
+  {
+    id: 'gw-6',
+    nip: '19880410 201402 2 005',
+    nama: 'Rina Sulistyowati',
+    gelar: 'S.Pd',
+    kelas: 'X KKBT, XI KKBT',
+    jurusan: 'Kriya Kreatif Batik dan Tekstil',
+    telepon: '081234998877',
+    email: 'rina.sulistyowati@smkn1jember.sch.id',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    bio: 'Wali Kelas X KKBT dan XI KKBT SMKN 1 Jember.',
+    role: 'wali_kelas',
+    roleLabel: 'Wali Kelas X KKBT & XI KKBT',
+    username: 'rina.sulistyowati',
+    password: 'guru123',
+    statusAkun: 'Aktif'
   }
 ];
 

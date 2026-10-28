@@ -64,19 +64,27 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
 
   const handleConfirm = () => {
     if (parsedRows.length === 0) return;
-    const formatted: UserAccount[] = parsedRows.map((r, i) => ({
-      id: r.id || `usr-imp-${Date.now()}-${i}`,
-      username: r.username || `user${i}`,
-      password: r.password || (r.role === 'admin' ? 'admin123' : r.role === 'guru_wali' ? 'guru123' : r.role === 'manajemen_bk' ? 'bk123' : '123456'),
-      nama: r.nama || 'Pengguna Baru',
-      kelas: r.kelas || (r.role === 'admin' ? 'Semua Kelas' : r.role === 'guru_wali' ? 'X KKBT' : '-'),
-      email: r.email || `${r.username || i}@smkn1jember.sch.id`,
-      role: r.role || 'guru_wali',
-      roleLabel: r.roleLabel || 'Guru Wali',
-      status: r.status || 'Aktif',
-      telepon: r.telepon || '',
-      lastLogin: r.lastLogin || '-'
-    }));
+    const formatted: UserAccount[] = parsedRows.map((r, i) => {
+      const role = r.role || 'guru_wali';
+      const defaultPass = role === 'admin' ? 'admin123' : role === 'kkk' ? 'kkk123' : role === 'guru_wali' || role === 'wali_kelas' ? 'guru123' : role === 'manajemen_bk' || role === 'bk' ? 'bk123' : '123456';
+      const defaultScope = role === 'admin' ? 'Semua Kelas & Jurusan' : role === 'kkk' ? 'Kriya Kreatif Batik dan Tekstil' : role === 'wali_kelas' ? 'X KKBT, XI KKBT' : role === 'manajemen_bk' || role === 'bk' ? 'X KKBT, X TL' : role === 'guru_wali' ? 'X KKBT' : '-';
+      const jurusan = role === 'kkk' ? (r.jurusan || r.kelas || 'Kriya Kreatif Batik dan Tekstil') : undefined;
+
+      return {
+        id: r.id || `usr-imp-${Date.now()}-${i}`,
+        username: r.username || `user${i}`,
+        password: r.password || defaultPass,
+        nama: r.nama || 'Pengguna Baru',
+        kelas: r.kelas || defaultScope,
+        jurusan,
+        email: r.email || `${r.username || i}@smkn1jember.sch.id`,
+        role,
+        roleLabel: r.roleLabel || (role === 'admin' ? 'Super Administrator' : role === 'kkk' ? `KKK ${jurusan || ''}` : role === 'wali_kelas' ? `Wali Kelas ${r.kelas || ''}` : role === 'manajemen_bk' || role === 'bk' ? `Guru BK (${r.kelas || ''})` : `Guru Wali Kelas ${r.kelas || ''}`),
+        status: r.status || 'Aktif',
+        telepon: r.telepon || '',
+        lastLogin: r.lastLogin || '-'
+      };
+    });
 
     onConfirmImport(formatted, replaceExisting);
     onClose();
@@ -112,19 +120,27 @@ export const ModalImportAkunExcel: React.FC<ModalImportAkunExcelProps> = ({
         {/* Content */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
           
-          {/* Template Download Notification */}
-          <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-purple-900">
-              <KeyRound className="w-4 h-4 text-purple-700 shrink-0" />
-              <span>Format kolom: Username, Kata Sandi, Nama Pengguna, <strong>Kelas Diampu</strong>, Email, Kode Role, Role Akses, Status Akun, Kontak Telepon</span>
+          {/* Template Download Notification & Rules */}
+          <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-purple-900 font-bold">
+                <KeyRound className="w-4 h-4 text-purple-700 shrink-0" />
+                <span>Format Kolom: Username, Kata Sandi, Nama Pengguna, <strong>Kelas / Jurusan Diampu</strong>, Email, Kode Role, Role Akses, Status Akun, Kontak Telepon</span>
+              </div>
+              <button
+                onClick={downloadTemplateAkunExcel}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-100 text-purple-800 border border-purple-300 font-bold rounded-lg cursor-pointer shrink-0 transition-colors shadow-2xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh Template</span>
+              </button>
             </div>
-            <button
-              onClick={downloadTemplateAkunExcel}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-100 text-purple-800 border border-purple-300 font-bold rounded-lg cursor-pointer shrink-0 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Unduh Template</span>
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 border-t border-purple-200/60 text-[11px] text-purple-900">
+              <p>• <strong>KKK</strong>: Mengampu 1 Jurusan (cth: <em>Kriya Kreatif Batik dan Tekstil</em>)</p>
+              <p>• <strong>BK</strong>: Mengampu beberapa kelas (cth: <em>X KKBT, X TL</em>)</p>
+              <p>• <strong>Wali Kelas</strong>: Mengampu beberapa kelas (cth: <em>X KKBT, XI KKBT</em>)</p>
+              <p>• <strong>Guru Wali</strong>: Hanya 1 kelas saja (cth: <em>X KKBT</em>)</p>
+            </div>
           </div>
 
           {/* Upload Area */}
