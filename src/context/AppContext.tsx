@@ -125,7 +125,29 @@ const STORAGE_KEYS = {
   GS_CONFIG: 'siguwa_google_sheets_config',
   PORTAL_SISWA: 'siguwa_portal_siswa_id',
   AUTH_USER: 'siguwa_auth_user',
-  DATA_VERSION: 'siguwa_version_flag_v4'
+  DATA_VERSION: 'siguwa_version_flag_v4',
+  DELETED_SISWA_IDS: 'siguwa_deleted_siswa_ids',
+  SISWA_CLEARED_FLAG: 'siguwa_siswa_cleared_flag'
+};
+
+// Tombstone helpers to permanently track deleted siswa IDs/NISNs
+const getDeletedSiswaIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_SISWA_IDS);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set(arr);
+      }
+    }
+  } catch (e) {}
+  return new Set();
+};
+
+const saveDeletedSiswaIds = (set: Set<string>) => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.DELETED_SISWA_IDS, JSON.stringify(Array.from(set)));
+  } catch (e) {}
 };
 
 const CURRENT_DATA_VERSION = 'v4_kelas_x_official_72_with_admin';
@@ -189,8 +211,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [siswaList, setSiswaList] = useState<Siswa[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SISWA);
-    return saved ? JSON.parse(saved) : INITIAL_SISWA;
+    try {
+      const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+      if (isCleared === 'true') {
+        return [];
+      }
+      const saved = localStorage.getItem(STORAGE_KEYS.SISWA);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const deleted = getDeletedSiswaIds();
+          return parsed.filter((s: Siswa) => !deleted.has(s.id) && !deleted.has(s.nisn));
+        }
+      }
+      const deleted = getDeletedSiswaIds();
+      return INITIAL_SISWA.filter(s => !deleted.has(s.id) && !deleted.has(s.nisn));
+    } catch (e) {
+      console.warn('Gagal membaca siswa:', e);
+      return [];
+    }
   });
 
   const [jurnalList, setJurnalList] = useState<JurnalLayanan[]>(() => {
@@ -590,26 +629,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const result = await fetchAllFromGoogleSheets(url);
     if (result.success && result.data) {
       // 1. Siswa
-      if (Array.isArray(result.data.siswa) && result.data.siswa.length > 0) {
-        const normalizedSiswa: Siswa[] = result.data.siswa.map((s: any, idx: number) => ({
-          id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
-          nisn: String(s.nisn || '').replace(/^'/, ''),
-          nama: String(s.nama || ''),
-          kelas: String(s.kelas || 'X KKBT'),
-          jurusan: String(s.jurusan || ''),
-          jenisKelamin: (s.jenisKelamin === 'P' ? 'P' : 'L') as 'L' | 'P',
-          tanggalLahir: typeof s.tanggalLahir === 'string' && s.tanggalLahir.includes('T')
-            ? s.tanggalLahir.split('T')[0]
-            : String(s.tanggalLahir || '2010-01-01'),
-          alamat: String(s.alamat || ''),
-          namaOrtu: String(s.namaOrtu || ''),
-          noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu).replace(/^'/, '') : '',
-          nilaiRataRata: Number(s.nilaiRataRata) || 80,
-          poinKarakter: Number(s.poinKarakter) || 85,
-          statusPendampingan: (s.statusPendampingan || 'Normal') as any,
-          catatanKhusus: String(s.catatanKhusus || '')
-        }));
-        setSiswaList(normalizedSiswa);
+      if (Array.isArray(result.data.siswa)) {
+        const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
+        if (isCleared && result.data.siswa.length === 0) {
+          setSiswaList([]);
+        } else if (!isCleared && result.data.siswa.length > 0) {
+          const deleted = getDeletedSiswaIds();
+          const normalizedSiswa: Siswa[] = result.data.siswa
+            .filter((s: any) => {
+              const id = String(s.id || '').trim();
+              const nisn = String(s.nisn || '').replace(/^'/, '').trim();
+              if (id && deleted.has(id)) return false;
+              if (nisn && deleted.has(nisn)) return false;
+              return true;
+            })
+            .map((s: any, idx: number) => ({
+              id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
+              nisn: String(s.nisn || '').replace(/^'/, ''),
+              nama: String(s.nama || ''),
+              kelas: String(s.kelas || 'X KKBT'),
+              jurusan: String(s.jurusan || ''),
+              jenisKelamin: (s.jenisKelamin === 'P' ? 'P' : 'L') as 'L' | 'P',
+              tanggalLahir: typeof s.tanggalLahir === 'string' && s.tanggalLahir.includes('T')
+                ? s.tanggalLahir.split('T')[0]
+                : String(s.tanggalLahir || '2010-01-01'),
+              alamat: String(s.alamat || ''),
+              namaOrtu: String(s.namaOrtu || ''),
+              noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu).replace(/^'/, '') : '',
+              nilaiRataRata: Number(s.nilaiRataRata) || 80,
+              poinKarakter: Number(s.poinKarakter) || 85,
+              statusPendampingan: (s.statusPendampingan || 'Normal') as any,
+              catatanKhusus: String(s.catatanKhusus || '')
+            }));
+          setSiswaList(normalizedSiswa);
+        }
       }
 
       // 2. Guru Wali
@@ -746,24 +799,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     const result = await fetchSiswaFromGoogleSheets(url);
     if (result.success && Array.isArray(result.data)) {
-      const normalizedSiswa: Siswa[] = result.data.map((s: any, idx: number) => ({
-        id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
-        nisn: String(s.nisn || '').replace(/^'/, ''),
-        nama: String(s.nama || ''),
-        kelas: String(s.kelas || 'X KKBT'),
-        jurusan: String(s.jurusan || ''),
-        jenisKelamin: (s.jenisKelamin === 'P' ? 'P' : 'L') as 'L' | 'P',
-        tanggalLahir: typeof s.tanggalLahir === 'string' && s.tanggalLahir.includes('T')
-          ? s.tanggalLahir.split('T')[0]
-          : String(s.tanggalLahir || '2010-01-01'),
-        alamat: String(s.alamat || ''),
-        namaOrtu: String(s.namaOrtu || ''),
-        noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu).replace(/^'/, '') : '',
-        nilaiRataRata: Number(s.nilaiRataRata) || 80,
-        poinKarakter: Number(s.poinKarakter) || 85,
-        statusPendampingan: (s.statusPendampingan || 'Normal') as any,
-        catatanKhusus: String(s.catatanKhusus || '')
-      }));
+      const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
+      const deleted = getDeletedSiswaIds();
+      const normalizedSiswa: Siswa[] = (isCleared && result.data.length === 0)
+        ? []
+        : result.data
+            .filter((s: any) => {
+              const id = String(s.id || '').trim();
+              const nisn = String(s.nisn || '').replace(/^'/, '').trim();
+              if (id && deleted.has(id)) return false;
+              if (nisn && deleted.has(nisn)) return false;
+              return true;
+            })
+            .map((s: any, idx: number) => ({
+              id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
+              nisn: String(s.nisn || '').replace(/^'/, ''),
+              nama: String(s.nama || ''),
+              kelas: String(s.kelas || 'X KKBT'),
+              jurusan: String(s.jurusan || ''),
+              jenisKelamin: (s.jenisKelamin === 'P' ? 'P' : 'L') as 'L' | 'P',
+              tanggalLahir: typeof s.tanggalLahir === 'string' && s.tanggalLahir.includes('T')
+                ? s.tanggalLahir.split('T')[0]
+                : String(s.tanggalLahir || '2010-01-01'),
+              alamat: String(s.alamat || ''),
+              namaOrtu: String(s.namaOrtu || ''),
+              noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu).replace(/^'/, '') : '',
+              nilaiRataRata: Number(s.nilaiRataRata) || 80,
+              poinKarakter: Number(s.poinKarakter) || 85,
+              statusPendampingan: (s.statusPendampingan || 'Normal') as any,
+              catatanKhusus: String(s.catatanKhusus || '')
+            }));
 
       setSiswaList(normalizedSiswa);
       updateGoogleSheetsConfig({
@@ -873,31 +938,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     googleSheetsConfig.appsScriptUrl
   ]);
 
-  // Real-time continuous background sync (initial pull on load + periodic poll every 20s + window focus)
+  // Real-time continuous background sync (initial pull on load + periodic poll every 20s)
   useEffect(() => {
     if (!googleSheetsConfig.appsScriptUrl || !googleSheetsConfig.autoSync) return;
 
     // Tarik data awal saat aplikasi dimuat
     syncPullFromSheets().catch(err => console.warn('Initial load pull notice:', err));
 
-    // Polling periodik setiap 20 detik secara terus-menerus
+    // Polling periodik setiap 20 detik secara tenang (tanpa window focus listener yang agresif)
     const interval = setInterval(() => {
       if (!document.hidden && navigator.onLine) {
         syncPullFromSheets().catch(err => console.warn('Real-time polling pull notice:', err));
       }
     }, 20000);
 
-    // Tarik data terbaru saat tab kembali aktif (focus)
-    const handleFocus = () => {
-      if (navigator.onLine) {
-        syncPullFromSheets().catch(err => console.warn('Focus pull notice:', err));
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
     };
   }, [googleSheetsConfig.appsScriptUrl, googleSheetsConfig.autoSync]);
 
@@ -913,6 +969,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Master Siswa CRUD
   const addSiswa = (siswa: Omit<Siswa, 'id'>) => {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+    } catch (e) {}
+
+    const deletedSet = getDeletedSiswaIds();
+    if (siswa.nisn && deletedSet.has(siswa.nisn)) {
+      deletedSet.delete(siswa.nisn);
+      saveDeletedSiswaIds(deletedSet);
+    }
+
     const newEntry: Siswa = {
       ...siswa,
       id: `sis-${Date.now()}`
@@ -927,18 +993,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteSiswa = (id: string) => {
-    setSiswaList(prev => prev.filter(s => s.id !== id));
-    triggerAutoPushIfEnabled();
+    // 1. Identifikasi siswa yang dihapus untuk dicatat ke daftar pemblokiran permanen (tombstone)
+    const target = siswaList.find(s => s.id === id);
+    const targetNisn = target ? target.nisn : '';
+
+    const deletedSet = getDeletedSiswaIds();
+    deletedSet.add(id);
+    if (targetNisn) {
+      deletedSet.add(targetNisn);
+    }
+    saveDeletedSiswaIds(deletedSet);
+
+    // 2. Filter seketika dari state dan localStorage agar tidak ada jeda
+    const nextList = siswaList.filter(s => s.id !== id && (targetNisn ? s.nisn !== targetNisn : true));
+    setSiswaList(nextList);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(nextList));
+    } catch (e) {}
+
+    // Perbarui dataRef seketika agar payload sinkronisasi tidak membawa data usang
+    dataRef.current.siswa = nextList;
+
+    // Jika siswa yang dihapus sedang aktif di portal wali, reset portal
+    if (selectedSiswaForPortal?.id === id || (targetNisn && selectedSiswaForPortal?.nisn === targetNisn)) {
+      setSelectedSiswaForPortalState(null);
+      localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
+    }
+
+    // 3. Kirim pembaruan ke Google Sheets seketika
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (url && googleSheetsConfig.autoSync) {
+      pushSiswaToGoogleSheets(url, nextList).catch(err => {
+        console.warn('Gagal sinkronisasi penghapusan siswa ke Google Sheets:', err);
+      });
+    }
   };
 
   const clearAllSiswa = async (): Promise<{ success: boolean; message: string }> => {
-    // 1. Kosongkan state lokal & penyimpanan peramban
+    // 1. Catat seluruh ID & NISN siswa saat ini ke daftar pemblokiran (tombstone)
+    const deletedSet = getDeletedSiswaIds();
+    siswaList.forEach(s => {
+      if (s.id) deletedSet.add(s.id);
+      if (s.nisn) deletedSet.add(s.nisn);
+    });
+    saveDeletedSiswaIds(deletedSet);
+
+    // 2. Berikan penanda permanen bahwa tabel siswa telah dikosongkan
+    try {
+      localStorage.setItem(STORAGE_KEYS.SISWA_CLEARED_FLAG, 'true');
+      localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify([]));
+    } catch (e) {}
+
+    // 3. Kosongkan state lokal & memori sesi
     setSiswaList([]);
-    localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify([]));
+    dataRef.current.siswa = [];
     setSelectedSiswaForPortalState(null);
     localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
 
-    // 2. Kosongkan otomatis di Google Spreadsheet (Tab Siswa)
+    // 4. Kosongkan otomatis di Google Spreadsheet (Tab Siswa)
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
     if (url) {
       updateGoogleSheetsConfig({
@@ -955,7 +1067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         return {
           success: true,
-          message: 'Seluruh data peserta didik di aplikasi dan Google Spreadsheet berhasil dikosongkan secara bersih!'
+          message: 'Seluruh data peserta didik di aplikasi dan Google Spreadsheet berhasil dikosongkan secara permanen!'
         };
       } else {
         updateGoogleSheetsConfig({
@@ -976,6 +1088,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const importSiswaList = (newList: Partial<Siswa>[], replaceExisting = false) => {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+    } catch (e) {}
+
+    const deletedSet = getDeletedSiswaIds();
+    newList.forEach(item => {
+      if (item.id && deletedSet.has(item.id)) deletedSet.delete(item.id);
+      if (item.nisn && deletedSet.has(item.nisn)) deletedSet.delete(item.nisn);
+    });
+    saveDeletedSiswaIds(deletedSet);
+
     const formatted: Siswa[] = newList.map((item, index) => ({
       id: item.id || `sis-imp-${Date.now()}-${index}`,
       nisn: item.nisn || `009${Date.now() + index}`,

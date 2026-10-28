@@ -1,26 +1,21 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
-  GraduationCap,
   Lock,
   User,
   Eye,
   EyeOff,
   LogIn,
-  Shield,
-  UserCheck,
-  Users,
-  ShieldAlert,
   AlertCircle,
-  Sparkles,
   Database,
   School,
-  CheckCircle2,
+  Sparkles,
+  Shield,
   KeyRound
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login, akunList, googleSheetsConfig } = useApp();
+  const { login } = useApp();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -41,83 +36,6 @@ export const LoginPage: React.FC = () => {
       setErrorMessage(result.message || 'Login gagal. Periksa kembali username dan password Anda.');
     }
   };
-
-  const handleQuickLogin = (demoUser: string, demoPass: string) => {
-    setUsername(demoUser);
-    setPassword(demoPass);
-    setErrorMessage(null);
-    setIsLoading(true);
-
-    const result = login(demoUser, demoPass);
-    setIsLoading(false);
-    if (!result.success) {
-      setErrorMessage(result.message || 'Login gagal.');
-    }
-  };
-
-  // Pre-configured demo accounts for convenience (covering all roles & classes)
-  const demoAccounts = [
-    {
-      role: 'admin',
-      roleLabel: 'Super Administrator',
-      nama: 'Administrator Utama SMKN 1 Jember',
-      username: 'admin.siguwa',
-      pass: 'admin123',
-      icon: Shield,
-      badgeColor: 'bg-amber-500 text-slate-950 border-amber-400',
-      desc: 'Kelola Master Siswa, Guru Wali, Akun, dan Sinkronisasi Google Sheets'
-    },
-    {
-      role: 'guru_wali',
-      roleLabel: 'Guru Wali X KKBT',
-      nama: 'Dra. Hj. Endang Sulistiyowati, M.Pd',
-      username: 'endang.sulistiyowati',
-      pass: 'guru123',
-      icon: UserCheck,
-      badgeColor: 'bg-blue-600 text-white border-blue-500',
-      desc: 'Akses Jurnal Layanan, Presensi Siswa X KKBT, Home Visit & Rujukan BK'
-    },
-    {
-      role: 'guru_wali',
-      roleLabel: 'Guru Wali X TL',
-      nama: 'Ahmad Fauzi, S.Kom., M.T',
-      username: 'ahmad.fauzi',
-      pass: 'guru123',
-      icon: UserCheck,
-      badgeColor: 'bg-indigo-600 text-white border-indigo-500',
-      desc: 'Akses Pembinaan Karakter & Monitoring Kelas X Teknik Logistik'
-    },
-    {
-      role: 'manajemen_bk',
-      roleLabel: 'BK & Kesiswaan',
-      nama: 'Sri Wahyuni, S.E., M.M',
-      username: 'sri.wahyuni',
-      pass: 'bk123',
-      icon: ShieldAlert,
-      badgeColor: 'bg-purple-600 text-white border-purple-500',
-      desc: 'Koordinasi Rujukan Kasus, Konseling Siswa & Rekapitulasi Karakter'
-    },
-    {
-      role: 'wali_murid',
-      roleLabel: 'Wali Murid X KKBT',
-      nama: 'Pratama Suwandi (Wali Andika Pratama)',
-      username: '0094201436',
-      pass: '123456',
-      icon: Users,
-      badgeColor: 'bg-emerald-600 text-white border-emerald-500',
-      desc: 'Pantau Presensi, Nilai Rapor Karakter, dan Konsultasi Online Guru Wali'
-    },
-    {
-      role: 'wali_murid',
-      roleLabel: 'Wali Murid X TL',
-      nama: 'Bambang Wulandari (Wali Anggita Putri)',
-      username: '0094672070',
-      pass: '123456',
-      icon: Users,
-      badgeColor: 'bg-teal-600 text-white border-teal-500',
-      desc: 'Pantau Presensi & Catatan Karakter Kelas X Teknik Logistik'
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-950 flex flex-col justify-between text-slate-100 font-sans selection:bg-amber-400 selection:text-slate-950 relative overflow-hidden">
@@ -247,9 +165,6 @@ export const LoginPage: React.FC = () => {
                     <label className="block text-xs font-bold text-slate-300">
                       Kata Sandi (Password) <span className="text-rose-400">*</span>
                     </label>
-                    <span className="text-[11px] text-blue-400">
-                      Bantuan: lihat demo di bawah
-                    </span>
                   </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -309,51 +224,6 @@ export const LoginPage: React.FC = () => {
                   )}
                 </button>
               </form>
-
-              {/* Quick Login Helper Accordion / Cards */}
-              <div className="mt-6 pt-5 border-t border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Akun Uji Coba (Demo Quick Login 1-Klik)
-                  </span>
-                  <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-amber-300 font-bold">
-                    Pilih Cepat
-                  </span>
-                </div>
-
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
-                  {demoAccounts.map((acc, idx) => {
-                    const Icon = acc.icon;
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleQuickLogin(acc.username, acc.pass)}
-                        className="w-full text-left p-2.5 rounded-xl bg-slate-950/50 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${acc.badgeColor}`}>
-                            <Icon className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors truncate">
-                                {acc.nama}
-                              </p>
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-mono">
-                              User: <span className="text-slate-300 font-semibold">{acc.username}</span> | Pass: <span className="text-slate-300 font-semibold">{acc.pass}</span>
-                            </p>
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-[10px] font-bold text-blue-400 group-hover:text-white bg-blue-500/10 group-hover:bg-blue-600 px-2 py-1 rounded-md transition-all ml-2">
-                          Login ➔
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
 
             </div>
           </div>
