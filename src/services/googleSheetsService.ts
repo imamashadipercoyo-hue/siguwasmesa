@@ -289,3 +289,51 @@ export async function pushSiswaToGoogleSheets(
     totalSynced: total
   };
 }
+
+/**
+ * Mengosongkan data peserta didik pada Google Spreadsheet
+ */
+export async function clearSiswaFromGoogleSheets(url: string): Promise<SyncResult> {
+  if (!url || !url.trim().startsWith('http')) {
+    return { success: false, message: 'URL Google Apps Script tidak valid' };
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'clearSiswaList'
+      })
+    });
+
+    const json = await response.json();
+    return {
+      success: json.success ?? true,
+      message: json.message || 'Data siswa di Google Sheets berhasil dikosongkan.'
+    };
+  } catch (err: any) {
+    // Fallback: kirim saveSiswaList dengan array kosong
+    try {
+      const fallbackRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'saveSiswaList',
+          siswaList: []
+        })
+      });
+      const fallbackJson = await fallbackRes.json();
+      return {
+        success: fallbackJson.success ?? true,
+        message: fallbackJson.message || 'Data siswa di Google Sheets berhasil dikosongkan.'
+      };
+    } catch (innerErr: any) {
+      return {
+        success: false,
+        message: 'Gagal mengosongkan data siswa di Google Sheets: ' + err.message,
+        error: err.message
+      };
+    }
+  }
+}

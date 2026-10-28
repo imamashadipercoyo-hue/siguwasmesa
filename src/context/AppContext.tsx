@@ -28,6 +28,7 @@ import {
   pushAllToGoogleSheets,
   pushSiswaToGoogleSheets,
   fetchSiswaFromGoogleSheets,
+  clearSiswaFromGoogleSheets,
   DEFAULT_APPS_SCRIPT_URL
 } from '../services/googleSheetsService';
 import { deduplicateAccounts } from '../utils/accountUtils';
@@ -67,6 +68,7 @@ interface AppContextType {
   addSiswa: (siswa: Omit<Siswa, 'id'>) => void;
   updateSiswa: (id: string, updates: Partial<Siswa>) => void;
   deleteSiswa: (id: string) => void;
+  clearAllSiswa: () => Promise<{ success: boolean; message: string }>;
   importSiswaList: (newList: Partial<Siswa>[], replaceExisting?: boolean) => void;
 
   addGuruWali: (guru: Omit<GuruWali, 'id'>) => void;
@@ -929,6 +931,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerAutoPushIfEnabled();
   };
 
+  const clearAllSiswa = async (): Promise<{ success: boolean; message: string }> => {
+    // 1. Kosongkan state lokal & penyimpanan peramban
+    setSiswaList([]);
+    localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify([]));
+    setSelectedSiswaForPortalState(null);
+    localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
+
+    // 2. Kosongkan otomatis di Google Spreadsheet (Tab Siswa)
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (url) {
+      updateGoogleSheetsConfig({
+        syncStatus: 'syncing',
+        syncMessage: 'Mengosongkan data peserta didik pada Google Spreadsheet...'
+      });
+
+      const result = await clearSiswaFromGoogleSheets(url);
+      if (result.success) {
+        updateGoogleSheetsConfig({
+          syncStatus: 'connected',
+          syncMessage: 'Data peserta didik pada Google Spreadsheet berhasil dikosongkan',
+          lastSyncTime: new Date().toLocaleTimeString('id-ID')
+        });
+        return {
+          success: true,
+          message: 'Seluruh data peserta didik di aplikasi dan Google Spreadsheet berhasil dikosongkan secara bersih!'
+        };
+      } else {
+        updateGoogleSheetsConfig({
+          syncStatus: 'error',
+          syncMessage: result.message || 'Gagal mengosongkan di Google Sheets'
+        });
+        return {
+          success: false,
+          message: 'Data di aplikasi telah dikosongkan, namun respon dari Google Sheets: ' + result.message
+        };
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Seluruh data peserta didik berhasil dikosongkan.'
+    };
+  };
+
   const importSiswaList = (newList: Partial<Siswa>[], replaceExisting = false) => {
     const formatted: Siswa[] = newList.map((item, index) => ({
       id: item.id || `sis-imp-${Date.now()}-${index}`,
@@ -1462,6 +1508,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addSiswa,
         updateSiswa,
         deleteSiswa,
+        clearAllSiswa,
         importSiswaList,
         addGuruWali,
         updateGuruWali,

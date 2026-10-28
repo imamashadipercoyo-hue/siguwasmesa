@@ -209,6 +209,14 @@ function doPost(e) {
         };
         break;
 
+      case 'clearSiswaList':
+        clearSiswaSheet(ss.getSheetByName(SHEET_NAMES.SISWA));
+        result = { 
+          success: true, 
+          message: 'Seluruh data peserta didik pada Google Spreadsheet berhasil dikosongkan.' 
+        };
+        break;
+
       // Solusi Skalabilitas 3.000 data: Menerima data per-chunk secara bertahap
       case 'saveSiswaChunk':
         var chunkIndex = payload.chunkIndex || 0;
@@ -281,23 +289,27 @@ function doPost(e) {
  */
 
 /**
- * Menulis seluruh data siswa secara langsung dengan Batching Memory V8
+ * Mengosongkan data peserta didik pada Google Spreadsheet dan menyisakan header resmi rapi
  */
-function writeSiswaToSheet(sheet, siswaList) {
-  if (!siswaList || siswaList.length === 0) return;
-
+function clearSiswaSheet(sheet) {
+  if (!sheet) return;
   sheet.clearContents();
-
-  // 1. Tulis Header
   sheet.getRange(1, 1, 1, SISWA_HEADERS.length).setValues([SISWA_HEADERS]);
   var headerRange = sheet.getRange(1, 1, 1, SISWA_HEADERS.length);
   headerRange.setBackground('#1e3a8a');
   headerRange.setFontColor('#ffffff');
   headerRange.setFontWeight('bold');
   headerRange.setHorizontalAlignment('center');
-
-  // 2. Set Lebar Kolom secara instan (<10 milidetik, tanpa autoResizeColumn lambat)
   applySiswaColumnWidths(sheet);
+}
+
+/**
+ * Menulis seluruh data siswa secara langsung dengan Batching Memory V8
+ */
+function writeSiswaToSheet(sheet, siswaList) {
+  if (!sheet) return;
+  clearSiswaSheet(sheet);
+  if (!siswaList || siswaList.length === 0) return;
 
   // 3. Tulis Baris Data dalam blok 1.000 baris untuk efisiensi RAM Apps Script
   var CHUNK_SIZE = 1000;
