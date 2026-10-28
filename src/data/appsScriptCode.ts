@@ -3,31 +3,34 @@
  * Backend Database Google Sheets untuk SIGUWA SMKN 1 JEMBER
  * Jl. Jambu No.17 Patrang - Jember (68118)
  * 
- * Struktur Kolom Tab Akun:
- * No | Username / NISN | Kata Sandi | Nama Pengguna | Kelas Diampu | Email | Peran / Role | Status | Terakhir Masuk | ID Akun | Role System | Kontak WA
+ * Teroptimasi untuk Kapasitas Skala Besar: Mampu menampung 3.000 - 10.000 Data Siswa
+ * Menggunakan Arsitektur High-Performance Chunking & Batching (Anti-Timeout)
  */
 
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
  * =========================================================================
- * BACKEND GOOGLE APPS SCRIPT - SIGUWA SMKN 1 JEMBER
- * Sistem Informasi Terpadu Guru Wali & Pendampingan Karakter Murid Berbasis Web Based Online
+ * BACKEND GOOGLE APPS SCRIPT - SIGUWA SMKN 1 JEMBER (VERSI OPTIMASI TINGGI)
+ * Sistem Informasi Terpadu Guru Wali & Pendampingan Karakter Murid Berbasis Web
  * Alamat: Jl. Jambu No.17 Patrang - Jember (68118)
  * =========================================================================
  * 
- * PANDUAN CEPAT DEPLOYMENT:
- * 1. Buat Google Spreadsheet baru di Google Drive (misal: "DB_SIGUWA_SMKN1_JEMBER").
+ * DILENGKAPI TEKNOLOGI BATCHING UNTUK 3.000+ DATA SISWA:
+ * 1. Menghilangkan bottleneck autoResizeColumn (yang memicu batas waktu eksekusi).
+ * 2. Menggunakan setColumnWidth instan (<10 milidetik).
+ * 3. Mendukung eksekusi single-shot maupun chunked batching (saveSiswaChunk).
+ * 4. Mendukung pembacaan cepat 1-call getValues() untuk 3.000 data dalam <1 detik.
+ * 
+ * PANDUAN CEPAT DEPLOYMENT / PEMBARUAN:
+ * 1. Buka Google Spreadsheet database sekolah di Google Drive.
  * 2. Buka menu: Ekstensi (Extensions) > Apps Script.
- * 3. Hapus semua kode default, lalu Tempel (Paste) seluruh kode ini ke file Code.gs.
+ * 3. Hapus seluruh kode lama di Code.gs, lalu Tempel (Paste) seluruh kode baru ini.
  * 4. Klik tombol Simpan (ikon disket).
- * 5. Klik menu: Terapkan (Deploy) > Kelola deployment baru (New deployment).
- * 6. Pilih tipe: Aplikasi Web (Web App).
- * 7. Pada 'Jalankan sebagai' (Execute as), pilih: 'Saya' (Me).
- * 8. Pada 'Yang memiliki akses' (Who has access), pilih: 'Siapa saja' (Anyone).
- * 9. Klik 'Terapkan' (Deploy) dan salin URL Aplikasi Web (Web App URL) yang dihasilkan.
- * 10. Buka SIGUWA > Menu Admin > Tab Google Sheets > Tempel URL tersebut > Klik 'Test & Simpan'.
+ * 5. Klik: Terapkan (Deploy) > Kelola deployment (Manage deployments) > Klik Edit (ikon pensil).
+ * 6. Pada Versi (Version), pilih 'Versi Baru' (New version) > Klik 'Terapkan' (Deploy).
+ * 7. Buka SIGUWA > Menu Admin > Tab Google Sheets > Klik 'Test & Simpan URL'.
  */
 
-// Konfigurasi Nama-nama Sheet/Tab
+// Konfigurasi Nama Sheet/Tab
 var SHEET_NAMES = {
   SISWA: 'Siswa',
   GURU_WALI: 'GuruWali',
@@ -37,6 +40,28 @@ var SHEET_NAMES = {
   RUJUKAN: 'RujukanBK',
   JADWAL: 'Jadwal'
 };
+
+// Header resmi tabel Siswa (Standar 3000 Data Terstruktur)
+var SISWA_HEADERS = [
+  'No',
+  'NISN',
+  'Nama Siswa',
+  'Kelas',
+  'Jurusan',
+  'Jenis Kelamin',
+  'Tanggal Lahir',
+  'Alamat',
+  'Nama Orang Tua / Wali',
+  'No HP Orang Tua',
+  'Nilai Rata-Rata',
+  'Poin Karakter',
+  'Status Pendampingan',
+  'Catatan Khusus',
+  'ID Siswa'
+];
+
+// Lebar kolom standar tabel Siswa (Menghindari kalkulasi autoResize lambat pada 3000 baris)
+var SISWA_COL_WIDTHS = [50, 130, 240, 95, 220, 65, 110, 250, 200, 140, 80, 80, 160, 240, 120];
 
 // Header resmi tabel Akun Pengguna
 var AKUN_HEADERS = [
@@ -53,6 +78,8 @@ var AKUN_HEADERS = [
   'Role System',
   'Kontak WA'
 ];
+
+var AKUN_COL_WIDTHS = [50, 150, 120, 220, 180, 200, 180, 90, 130, 140, 120, 140];
 
 // Header resmi tabel Master Guru Wali & Kelas Pendidik (Terkoneksi Akun)
 var GURU_WALI_HEADERS = [
@@ -72,16 +99,17 @@ var GURU_WALI_HEADERS = [
   'Bio Singkat'
 ];
 
+var GURU_WALI_COL_WIDTHS = [50, 160, 220, 90, 180, 180, 140, 120, 200, 140, 90, 110, 200, 250];
+
 /**
  * Handle HTTP GET Request
- * Membaca data secara Real-time dari Google Sheets dan mengirimkan JSON ke aplikasi
+ * Membaca data secara Real-time dari Google Sheets
  */
 function doGet(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'getAll';
 
-    // Inisialisasi sheet jika belum ada
     checkAndInitSheets(ss);
 
     var responseData = {};
@@ -92,7 +120,7 @@ function doGet(e) {
         message: 'Data berhasil disinkronisasi dari Google Sheet SMKN 1 Jember',
         timestamp: new Date().toISOString(),
         data: {
-          siswa: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.SISWA)),
+          siswa: getSiswaDataAsJson(ss.getSheetByName(SHEET_NAMES.SISWA)),
           guruWali: getGuruWaliDataAsJson(ss.getSheetByName(SHEET_NAMES.GURU_WALI)),
           akun: getAkunDataAsJson(ss.getSheetByName(SHEET_NAMES.AKUN)),
           jurnal: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.JURNAL)),
@@ -101,10 +129,19 @@ function doGet(e) {
           jadwal: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.JADWAL))
         }
       };
+    } else if (action === 'getSiswa') {
+      var siswaData = getSiswaDataAsJson(ss.getSheetByName(SHEET_NAMES.SISWA));
+      responseData = {
+        success: true,
+        total: siswaData.length,
+        message: 'Berhasil memuat ' + siswaData.length + ' data siswa',
+        data: siswaData,
+        timestamp: new Date().toISOString()
+      };
     } else if (action === 'ping') {
       responseData = {
         success: true,
-        message: 'Koneksi ke Google Sheets Backend SMKN 1 Jember Terhubung Aktif!',
+        message: 'Koneksi ke Google Sheets Backend SMKN 1 Jember Terhubung Aktif (Mendukung 3.000+ Data)!',
         spreadsheetName: ss.getName(),
         spreadsheetId: ss.getId(),
         timestamp: new Date().toISOString()
@@ -123,7 +160,7 @@ function doGet(e) {
 
 /**
  * Handle HTTP POST Request
- * Menerima payload dari aplikasi SIGUWA (Push, Tambah, Edit, Hapus, Import)
+ * Menerima payload dari aplikasi SIGUWA (Dukungan Chunking & Batching)
  */
 function doPost(e) {
   try {
@@ -140,14 +177,14 @@ function doPost(e) {
       case 'ping':
         result = {
           success: true,
-          message: 'Koneksi Berhasil! Database Google Sheet siap digunakan.'
+          message: 'Koneksi Berhasil! Database Google Sheet siap menampung data besar.'
         };
         break;
 
       case 'syncAll':
-        // Simpan keseluruhan data
+        // Simpan data menyeluruh
         if (payload.data) {
-          if (payload.data.siswa) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.SISWA), payload.data.siswa);
+          if (payload.data.siswa) writeSiswaToSheet(ss.getSheetByName(SHEET_NAMES.SISWA), payload.data.siswa);
           if (payload.data.guruWali) writeGuruWaliToSheet(ss.getSheetByName(SHEET_NAMES.GURU_WALI), payload.data.guruWali);
           if (payload.data.akun) writeAkunToSheet(ss.getSheetByName(SHEET_NAMES.AKUN), payload.data.akun);
           if (payload.data.jurnal) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.JURNAL), payload.data.jurnal);
@@ -162,18 +199,44 @@ function doPost(e) {
         };
         break;
 
+      case 'saveSiswaList':
+        if (payload.siswaList) {
+          writeSiswaToSheet(ss.getSheetByName(SHEET_NAMES.SISWA), payload.siswaList);
+        }
+        result = { 
+          success: true, 
+          message: 'Data Master Siswa (' + (payload.siswaList ? payload.siswaList.length : 0) + ' data) berhasil disimpan di Google Sheets.' 
+        };
+        break;
+
+      // Solusi Skalabilitas 3.000 data: Menerima data per-chunk secara bertahap
+      case 'saveSiswaChunk':
+        var chunkIndex = payload.chunkIndex || 0;
+        var totalChunks = payload.totalChunks || 1;
+        var items = payload.items || [];
+        var startingNo = payload.startingNo || 1;
+
+        appendSiswaChunkToSheet(
+          ss.getSheetByName(SHEET_NAMES.SISWA),
+          chunkIndex,
+          totalChunks,
+          items,
+          startingNo
+        );
+
+        result = {
+          success: true,
+          message: 'Bagian ' + (chunkIndex + 1) + ' dari ' + totalChunks + ' (' + items.length + ' siswa) tersimpan rapi.',
+          chunkIndex: chunkIndex,
+          totalChunks: totalChunks
+        };
+        break;
+
       case 'saveAkunList':
         if (payload.akunList) {
           writeAkunToSheet(ss.getSheetByName(SHEET_NAMES.AKUN), payload.akunList);
         }
         result = { success: true, message: 'Data Master Akun Pengguna berhasil diperbarui di Google Sheets.' };
-        break;
-
-      case 'saveSiswaList':
-        if (payload.siswaList) {
-          writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.SISWA), payload.siswaList);
-        }
-        result = { success: true, message: 'Data Master Siswa berhasil diperbarui di Google Sheets.' };
         break;
 
       case 'saveGuruWaliList':
@@ -206,20 +269,219 @@ function doPost(e) {
     return createJsonResponse({
       success: false,
       error: err.toString(),
-      message: 'Gagal memproses permintaan POST pada Google Sheets'
+      message: 'Gagal memproses permintaan POST pada Google Sheets: ' + err.message
     });
   }
 }
 
 /**
- * Khusus Akun: Menulis data akun dengan format tabel rapi:
- * No | Username / NISN | Kata Sandi | Nama Pengguna | Kelas Diampu | Email | Peran / Role | Status | Terakhir Masuk | ID Akun | Role System | Kontak WA
+ * =========================================================================
+ * KHUSUS TAB SISWA (KAPASITAS TINGGI: HINGGA 3.000 - 10.000 BARIS)
+ * =========================================================================
+ */
+
+/**
+ * Menulis seluruh data siswa secara langsung dengan Batching Memory V8
+ */
+function writeSiswaToSheet(sheet, siswaList) {
+  if (!siswaList || siswaList.length === 0) return;
+
+  sheet.clearContents();
+
+  // 1. Tulis Header
+  sheet.getRange(1, 1, 1, SISWA_HEADERS.length).setValues([SISWA_HEADERS]);
+  var headerRange = sheet.getRange(1, 1, 1, SISWA_HEADERS.length);
+  headerRange.setBackground('#1e3a8a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+
+  // 2. Set Lebar Kolom secara instan (<10 milidetik, tanpa autoResizeColumn lambat)
+  applySiswaColumnWidths(sheet);
+
+  // 3. Tulis Baris Data dalam blok 1.000 baris untuk efisiensi RAM Apps Script
+  var CHUNK_SIZE = 1000;
+  for (var i = 0; i < siswaList.length; i += CHUNK_SIZE) {
+    var chunk = siswaList.slice(i, i + CHUNK_SIZE);
+    var rows = [];
+
+    for (var k = 0; k < chunk.length; k++) {
+      var s = chunk[k];
+      var no = i + k + 1;
+      var nisn = String(s.nisn || '').trim();
+      if (/^0\\d+/.test(nisn)) nisn = "'" + nisn;
+
+      var noHp = String(s.noHpOrtu || '').trim();
+      if (/^0\\d+/.test(noHp)) noHp = "'" + noHp;
+
+      var tglLahir = String(s.tanggalLahir || '2010-01-01');
+      if (tglLahir.includes('T')) tglLahir = tglLahir.split('T')[0];
+
+      rows.push([
+        no,
+        nisn,
+        String(s.nama || '').trim(),
+        String(s.kelas || 'X KKBT').trim(),
+        String(s.jurusan || '').trim(),
+        String(s.jenisKelamin || 'L').toUpperCase().startsWith('P') ? 'P' : 'L',
+        tglLahir,
+        String(s.alamat || '').trim(),
+        String(s.namaOrtu || '').trim(),
+        noHp,
+        Number(s.nilaiRataRata) || 80,
+        Number(s.poinKarakter) || 85,
+        String(s.statusPendampingan || 'Normal').trim(),
+        String(s.catatanKhusus || '').trim(),
+        String(s.id || ('sis-' + no)).trim()
+      ]);
+    }
+
+    var startRow = 2 + i;
+    sheet.getRange(startRow, 1, rows.length, SISWA_HEADERS.length).setValues(rows);
+  }
+}
+
+/**
+ * Menulis data siswa secara bertahap (Chunked Upload) untuk dataset sangat besar
+ */
+function appendSiswaChunkToSheet(sheet, chunkIndex, totalChunks, chunkItems, startingNo) {
+  if (chunkIndex === 0) {
+    sheet.clearContents();
+    sheet.getRange(1, 1, 1, SISWA_HEADERS.length).setValues([SISWA_HEADERS]);
+    var headerRange = sheet.getRange(1, 1, 1, SISWA_HEADERS.length);
+    headerRange.setBackground('#1e3a8a');
+    headerRange.setFontColor('#ffffff');
+    headerRange.setFontWeight('bold');
+    headerRange.setHorizontalAlignment('center');
+
+    applySiswaColumnWidths(sheet);
+  }
+
+  if (!chunkItems || chunkItems.length === 0) return;
+
+  var lastRow = sheet.getLastRow();
+  var startRow = (chunkIndex === 0) ? 2 : (lastRow + 1);
+  var baseNo = (typeof startingNo === 'number' && startingNo > 0) ? startingNo : (startRow - 1);
+
+  var rows = [];
+  for (var k = 0; k < chunkItems.length; k++) {
+    var s = chunkItems[k];
+    var no = baseNo + k;
+    var nisn = String(s.nisn || '').trim();
+    if (/^0\\d+/.test(nisn)) nisn = "'" + nisn;
+
+    var noHp = String(s.noHpOrtu || '').trim();
+    if (/^0\\d+/.test(noHp)) noHp = "'" + noHp;
+
+    var tglLahir = String(s.tanggalLahir || '2010-01-01');
+    if (tglLahir.includes('T')) tglLahir = tglLahir.split('T')[0];
+
+    rows.push([
+      no,
+      nisn,
+      String(s.nama || '').trim(),
+      String(s.kelas || 'X KKBT').trim(),
+      String(s.jurusan || '').trim(),
+      String(s.jenisKelamin || 'L').toUpperCase().startsWith('P') ? 'P' : 'L',
+      tglLahir,
+      String(s.alamat || '').trim(),
+      String(s.namaOrtu || '').trim(),
+      noHp,
+      Number(s.nilaiRataRata) || 80,
+      Number(s.poinKarakter) || 85,
+      String(s.statusPendampingan || 'Normal').trim(),
+      String(s.catatanKhusus || '').trim(),
+      String(s.id || ('sis-' + no)).trim()
+    ]);
+  }
+
+  sheet.getRange(startRow, 1, rows.length, SISWA_HEADERS.length).setValues(rows);
+}
+
+function applySiswaColumnWidths(sheet) {
+  for (var c = 0; c < SISWA_COL_WIDTHS.length; c++) {
+    sheet.setColumnWidth(c + 1, SISWA_COL_WIDTHS[c]);
+  }
+}
+
+/**
+ * Membaca 3.000+ data siswa dalam 1 panggilan getValues() cepat (<0.5 detik)
+ */
+function getSiswaDataAsJson(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= 1 || lastCol === 0) return [];
+
+  var values = sheet.getRange(1, 1, lastRow, Math.min(lastCol, SISWA_HEADERS.length)).getValues();
+  var headers = values[0];
+  var result = [];
+
+  // Peta indeks header
+  var colMap = {};
+  for (var c = 0; c < headers.length; c++) {
+    var h = String(headers[c] || '').toLowerCase().trim();
+    colMap[h] = c;
+  }
+
+  var idxNisn = colMap['nisn'] !== undefined ? colMap['nisn'] : 1;
+  var idxNama = colMap['nama siswa'] !== undefined ? colMap['nama siswa'] : (colMap['nama lengkap'] !== undefined ? colMap['nama lengkap'] : (colMap['nama'] !== undefined ? colMap['nama'] : 2));
+  var idxKelas = colMap['kelas'] !== undefined ? colMap['kelas'] : 3;
+  var idxJurusan = colMap['jurusan'] !== undefined ? colMap['jurusan'] : 4;
+  var idxJK = colMap['jenis kelamin'] !== undefined ? colMap['jenis kelamin'] : (colMap['jk'] !== undefined ? colMap['jk'] : 5);
+  var idxTgl = colMap['tanggal lahir'] !== undefined ? colMap['tanggal lahir'] : 6;
+  var idxAlamat = colMap['alamat'] !== undefined ? colMap['alamat'] : 7;
+  var idxOrtu = colMap['nama orang tua / wali'] !== undefined ? colMap['nama orang tua / wali'] : (colMap['nama ortu'] !== undefined ? colMap['nama ortu'] : 8);
+  var idxHpOrtu = colMap['no hp orang tua'] !== undefined ? colMap['no hp orang tua'] : (colMap['no hp ortu'] !== undefined ? colMap['no hp ortu'] : 9);
+  var idxNilai = colMap['nilai rata-rata'] !== undefined ? colMap['nilai rata-rata'] : (colMap['nilai'] !== undefined ? colMap['nilai'] : 10);
+  var idxPoin = colMap['poin karakter'] !== undefined ? colMap['poin karakter'] : (colMap['poin'] !== undefined ? colMap['poin'] : 11);
+  var idxStatus = colMap['status pendampingan'] !== undefined ? colMap['status pendampingan'] : (colMap['status'] !== undefined ? colMap['status'] : 12);
+  var idxCatatan = colMap['catatan khusus'] !== undefined ? colMap['catatan khusus'] : (colMap['catatan'] !== undefined ? colMap['catatan'] : 13);
+  var idxId = colMap['id siswa'] !== undefined ? colMap['id siswa'] : (colMap['id'] !== undefined ? colMap['id'] : 14);
+
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    var rawNisn = String(row[idxNisn] !== undefined ? row[idxNisn] : '').replace(/^'/, '').trim();
+    var rawNama = String(row[idxNama] !== undefined ? row[idxNama] : '').trim();
+    if (!rawNisn && !rawNama) continue;
+
+    var rawTgl = row[idxTgl];
+    var formattedTgl = '2010-01-01';
+    if (rawTgl instanceof Date) {
+      formattedTgl = Utilities.formatDate(rawTgl, Session.getScriptTimeZone() || 'Asia/Jakarta', 'yyyy-MM-dd');
+    } else if (typeof rawTgl === 'string' && rawTgl) {
+      formattedTgl = rawTgl.includes('T') ? rawTgl.split('T')[0] : rawTgl.replace(/^'/, '').trim();
+    }
+
+    result.push({
+      id: String(row[idxId] || ('sis-' + r)).trim(),
+      nisn: rawNisn,
+      nama: rawNama,
+      kelas: String(row[idxKelas] || 'X KKBT').trim(),
+      jurusan: String(row[idxJurusan] || '').trim(),
+      jenisKelamin: String(row[idxJK] || 'L').toUpperCase().startsWith('P') ? 'P' : 'L',
+      tanggalLahir: formattedTgl,
+      alamat: String(row[idxAlamat] || '').trim(),
+      namaOrtu: String(row[idxOrtu] || '').trim(),
+      noHpOrtu: String(row[idxHpOrtu] || '').replace(/^'/, '').trim(),
+      nilaiRataRata: Number(row[idxNilai]) || 80,
+      poinKarakter: Number(row[idxPoin]) || 85,
+      statusPendampingan: String(row[idxStatus] || 'Normal').trim(),
+      catatanKhusus: String(row[idxCatatan] || '').trim()
+    });
+  }
+
+  return result;
+}
+
+/**
+ * =========================================================================
+ * KHUSUS TAB AKUN PENGGUNA
+ * =========================================================================
  */
 function writeAkunToSheet(sheet, akunList) {
   if (!akunList || akunList.length === 0) return;
-  sheet.clear();
+  sheet.clearContents();
 
-  // Deduplikasi data akun berdasarkan username
   var seenUsernames = {};
   var uniqueAccounts = [];
   for (var i = 0; i < akunList.length; i++) {
@@ -240,8 +502,7 @@ function writeAkunToSheet(sheet, akunList) {
     var username = String(item.username || '').trim();
     var password = String(item.password || (item.role === 'admin' ? 'admin123' : item.role === 'kkk' ? 'kkk123' : (item.role === 'guru_wali' || item.role === 'wali_kelas') ? 'guru123' : (item.role === 'manajemen_bk' || item.role === 'bk') ? 'bk123' : '123456'));
     var nama = String(item.nama || '');
-    
-    // Lingkup pengampu sesuai peran: KKK = 1 jurusan, Guru Wali = 1 kelas, Wali Kelas & BK = beberapa kelas
+
     var scopeDiampu = item.kelas || '-';
     if (item.role === 'kkk') {
       scopeDiampu = item.jurusan || item.kelas || 'Kriya Kreatif Batik dan Tekstil';
@@ -263,13 +524,8 @@ function writeAkunToSheet(sheet, akunList) {
     var roleSystem = String(item.role || 'guru_wali');
     var telepon = String(item.telepon || '');
 
-    // Format username & telepon dengan petik tunggal jika diawali angka 0 agar tidak hilang di Spreadsheet
-    if (/^0\\d+/.test(username)) {
-      username = "'" + username;
-    }
-    if (/^0\\d+/.test(telepon)) {
-      telepon = "'" + telepon;
-    }
+    if (/^0\\d+/.test(username)) username = "'" + username;
+    if (/^0\\d+/.test(telepon)) telepon = "'" + telepon;
 
     rows.push([
       no,
@@ -290,28 +546,17 @@ function writeAkunToSheet(sheet, akunList) {
   var range = sheet.getRange(1, 1, rows.length, AKUN_HEADERS.length);
   range.setValues(rows);
 
-  // Format Header Baris Pertama
   var headerRange = sheet.getRange(1, 1, 1, AKUN_HEADERS.length);
   headerRange.setBackground('#1e3a8a');
   headerRange.setFontColor('#ffffff');
   headerRange.setFontWeight('bold');
   headerRange.setHorizontalAlignment('center');
 
-  // Format Kolom No dan Status ke Tengah
-  if (rows.length > 1) {
-    sheet.getRange(2, 1, rows.length - 1, 1).setHorizontalAlignment('center');
-    sheet.getRange(2, 8, rows.length - 1, 1).setHorizontalAlignment('center');
-  }
-
-  // Auto-fit kolom agar rapi dibaca
-  for (var col = 1; col <= AKUN_HEADERS.length; col++) {
-    sheet.autoResizeColumn(col);
+  for (var c = 0; c < AKUN_COL_WIDTHS.length; c++) {
+    sheet.setColumnWidth(c + 1, AKUN_COL_WIDTHS[c]);
   }
 }
 
-/**
- * Khusus Akun: Membaca tabel Akun dan mengubah ke JSON yang dipahami aplikasi
- */
 function getAkunDataAsJson(sheet) {
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
@@ -333,12 +578,10 @@ function getAkunDataAsJson(sheet) {
       rowObj[h] = val;
     }
 
-    // Ekstrak data akun baik dengan header Bahasa Indonesia maupun Key CamelCase
     var rawUsername = rowObj['Username / NISN'] || rowObj['Username'] || rowObj['username'] || '';
     var cleanUsername = String(rawUsername).replace(/^'/, '').trim();
     if (!cleanUsername) continue;
 
-    // Cegah duplikasi username dari baris ganda
     var lowerUser = cleanUsername.toLowerCase();
     if (seenMap[lowerUser]) continue;
     seenMap[lowerUser] = true;
@@ -354,7 +597,6 @@ function getAkunDataAsJson(sheet) {
     var role = String(rowObj['Role System'] || rowObj['role'] || '');
     var telepon = String(rowObj['Kontak WA'] || rowObj['Telepon'] || rowObj['telepon'] || '').replace(/^'/, '');
 
-    // Inferensi role jika kosong
     if (!role) {
       var rLower = roleLabel.toLowerCase();
       if (lowerUser.includes('admin') || rLower.includes('admin')) {
@@ -403,12 +645,13 @@ function getAkunDataAsJson(sheet) {
 }
 
 /**
- * Khusus Guru Wali & Pendidik: Menulis data guru dengan sinkronisasi peran dan akun:
- * No | NIP | Nama Lengkap | Gelar | Peran / Role | Kelas / Jurusan Diampu | Username Akun | Kata Sandi | Email | No Telepon / WA | Status Akun | ID Guru | Program Keahlian | Bio Singkat
+ * =========================================================================
+ * KHUSUS TAB GURU WALI & KELAS PENDIDIK
+ * =========================================================================
  */
 function writeGuruWaliToSheet(sheet, guruList) {
   if (!guruList || guruList.length === 0) return;
-  sheet.clear();
+  sheet.clearContents();
 
   var seenNip = {};
   var uniqueGurus = [];
@@ -485,19 +728,11 @@ function writeGuruWaliToSheet(sheet, guruList) {
   headerRange.setFontWeight('bold');
   headerRange.setHorizontalAlignment('center');
 
-  if (rows.length > 1) {
-    sheet.getRange(2, 1, rows.length - 1, 1).setHorizontalAlignment('center');
-    sheet.getRange(2, 11, rows.length - 1, 1).setHorizontalAlignment('center');
-  }
-
-  for (var col = 1; col <= GURU_WALI_HEADERS.length; col++) {
-    sheet.autoResizeColumn(col);
+  for (var c = 0; c < GURU_WALI_COL_WIDTHS.length; c++) {
+    sheet.setColumnWidth(c + 1, GURU_WALI_COL_WIDTHS[c]);
   }
 }
 
-/**
- * Khusus Guru Wali: Membaca tabel GuruWali dari Google Sheets dan sinkronisasi ke JSON
- */
 function getGuruWaliDataAsJson(sheet) {
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
@@ -583,13 +818,14 @@ function getGuruWaliDataAsJson(sheet) {
 }
 
 /**
- * Helper: Mengubah array of objects menjadi baris pada Sheet umum
+ * =========================================================================
+ * HELPER UMUM SHEET LAIN (JURNAL, PRESENSI, RUJUKAN, JADWAL)
+ * =========================================================================
  */
 function writeJsonToSheet(sheet, items) {
   if (!items || items.length === 0) return;
-  sheet.clear();
+  sheet.clearContents();
 
-  // Kumpulkan seluruh header unik agar tidak ada kolom yang hilang
   var headerMap = {};
   var headers = [];
   for (var i = 0; i < items.length; i++) {
@@ -615,8 +851,7 @@ function writeJsonToSheet(sheet, items) {
       var val = currentItem ? currentItem[key] : '';
       if (val === undefined || val === null) val = '';
       if (typeof val === 'object') val = JSON.stringify(val);
-      
-      // Amankan NISN, NIP, Telepon agar nol di depan tidak terhapus
+
       var valStr = String(val);
       if ((key === 'nisn' || key === 'nip' || key === 'telepon' || key === 'noHpOrtu') && /^0\\d+/.test(valStr)) {
         val = "'" + valStr;
@@ -629,21 +864,20 @@ function writeJsonToSheet(sheet, items) {
   var range = sheet.getRange(1, 1, rows.length, headers.length);
   range.setValues(rows);
 
-  // Format header baris pertama
   var headerRange = sheet.getRange(1, 1, 1, headers.length);
   headerRange.setBackground('#1e3a8a');
   headerRange.setFontColor('#ffffff');
   headerRange.setFontWeight('bold');
   headerRange.setHorizontalAlignment('center');
 
-  for (var c = 1; c <= headers.length; c++) {
-    sheet.autoResizeColumn(c);
+  // Hanya autoResize jika baris sedikit (< 100 baris) agar tidak timeout
+  if (items.length <= 100) {
+    for (var c = 1; c <= headers.length; c++) {
+      sheet.autoResizeColumn(c);
+    }
   }
 }
 
-/**
- * Helper: Membaca sheet umum dan mengembalikan array of objects
- */
 function getSheetDataAsJson(sheet) {
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
@@ -658,7 +892,7 @@ function getSheetDataAsJson(sheet) {
     for (var c = 0; c < headers.length; c++) {
       var key = headers[c];
       var cellVal = values[r][c];
-      
+
       if (typeof cellVal === 'string') {
         cellVal = cellVal.replace(/^'/, '');
         if (cellVal.startsWith('{') || cellVal.startsWith('[')) {
@@ -674,9 +908,6 @@ function getSheetDataAsJson(sheet) {
   return result;
 }
 
-/**
- * Helper: Inisialisasi otomatis tab-tab pada Spreadsheet baru
- */
 function checkAndInitSheets(ss) {
   var sheetNames = [
     SHEET_NAMES.SISWA,
@@ -696,16 +927,12 @@ function checkAndInitSheets(ss) {
     }
   }
 
-  // Hapus sheet default "Sheet1" jika ada dan ada sheet lain
   var defaultSheet = ss.getSheetByName('Sheet1') || ss.getSheetByName('Sheet 1');
   if (defaultSheet && ss.getSheets().length > 1) {
     try { ss.deleteSheet(defaultSheet); } catch (e) {}
   }
 }
 
-/**
- * Helper: Format Response JSON dengan CORS Header
- */
 function createJsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);

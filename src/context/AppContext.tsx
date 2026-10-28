@@ -26,6 +26,8 @@ import {
   testAppsScriptConnection,
   fetchAllFromGoogleSheets,
   pushAllToGoogleSheets,
+  pushSiswaToGoogleSheets,
+  fetchSiswaFromGoogleSheets,
   DEFAULT_APPS_SCRIPT_URL
 } from '../services/googleSheetsService';
 import { deduplicateAccounts } from '../utils/accountUtils';
@@ -58,6 +60,8 @@ interface AppContextType {
   testGoogleSheets: () => Promise<{ success: boolean; message: string }>;
   syncPullFromSheets: () => Promise<{ success: boolean; message: string }>;
   syncPushToSheets: () => Promise<{ success: boolean; message: string }>;
+  syncPushSiswaToSheets: (onProgress?: (info: { chunkIndex: number; totalChunks: number; percent: number; message: string }) => void) => Promise<{ success: boolean; message: string; totalSynced?: number }>;
+  syncPullSiswaFromSheets: () => Promise<{ success: boolean; message: string; totalSynced?: number }>;
 
   // Admin Master Data Actions
   addSiswa: (siswa: Omit<Siswa, 'id'>) => void;
@@ -699,24 +703,136 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const syncPushSiswaToSheets = async (
+    onProgress?: (info: { chunkIndex: number; totalChunks: number; percent: number; message: string }) => void
+  ): Promise<{ success: boolean; message: string; totalSynced?: number }> => {
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (!url) {
+      return { success: false, message: 'URL Apps Script belum diisi' };
+    }
+    updateGoogleSheetsConfig({
+      syncStatus: 'syncing',
+      syncMessage: `Memulai pengunggahan ${siswaList.length} data siswa ke Google Sheets...`
+    });
+
+    const result = await pushSiswaToGoogleSheets(url, siswaList, (p) => {
+      updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: p.message });
+      if (onProgress) onProgress(p);
+    });
+
+    if (result.success) {
+      updateGoogleSheetsConfig({
+        syncStatus: 'connected',
+        syncMessage: `Master Siswa (${result.totalSynced || siswaList.length} data) tersimpan rapi di Google Sheets`,
+        lastSyncTime: new Date().toLocaleTimeString('id-ID')
+      });
+      return { success: true, message: result.message, totalSynced: result.totalSynced };
+    } else {
+      updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: result.message });
+      return { success: false, message: result.message };
+    }
+  };
+
+  const syncPullSiswaFromSheets = async (): Promise<{ success: boolean; message: string; totalSynced?: number }> => {
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (!url) {
+      return { success: false, message: 'URL Apps Script belum diisi' };
+    }
+    updateGoogleSheetsConfig({
+      syncStatus: 'syncing',
+      syncMessage: 'Mengunduh data master siswa dari Google Sheets...'
+    });
+    const result = await fetchSiswaFromGoogleSheets(url);
+    if (result.success && Array.isArray(result.data)) {
+      const normalizedSiswa: Siswa[] = result.data.map((s: any, idx: number) => ({
+        id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
+        nisn: String(s.nisn || '').replace(/^'/, ''),
+        nama: String(s.nama || ''),
+        kelas: String(s.kelas || 'X KKBT'),
+        jurusan: String(s.jurusan || ''),
+        jenisKelamin: (s.jenisKelamin === 'P' ? 'P' : 'L') as 'L' | 'P',
+        tanggalLahir: typeof s.tanggalLahir === 'string' && s.tanggalLahir.includes('T')
+          ? s.tanggalLahir.split('T')[0]
+          : String(s.tanggalLahir || '2010-01-01'),
+        alamat: String(s.alamat || ''),
+        namaOrtu: String(s.namaOrtu || ''),
+        noHpOrtu: s.noHpOrtu !== undefined && s.noHpOrtu !== null ? String(s.noHpOrtu).replace(/^'/, '') : '',
+        nilaiRataRata: Number(s.nilaiRataRata) || 80,
+        poinKarakter: Number(s.poinKarakter) || 85,
+        statusPendampingan: (s.statusPendampingan || 'Normal') as any,
+        catatanKhusus: String(s.catatanKhusus || '')
+      }));
+
+      setSiswaList(normalizedSiswa);
+      updateGoogleSheetsConfig({
+        syncStatus: 'connected',
+        syncMessage: `Berhasil sinkron ${normalizedSiswa.length} data siswa dari Google Sheets`,
+        lastSyncTime: new Date().toLocaleTimeString('id-ID')
+      });
+      return {
+        success: true,
+        message: `Berhasil memuat ${normalizedSiswa.length} data siswa dari Google Sheets!`,
+        totalSynced: normalizedSiswa.length
+      };
+    } else {
+      updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: result.message });
+      return { success: false, message: result.message };
+    }
+  };
+
   const syncPushToSheets = async (): Promise<{ success: boolean; message: string }> => {
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
     if (!url) {
       return { success: false, message: 'URL Apps Script belum diisi' };
     }
     updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: 'Mengunggah data ke Google Sheets...' });
-    const payload = dataRef.current;
-    const result = await pushAllToGoogleSheets(url, payload);
-    if (result.success) {
-      updateGoogleSheetsConfig({
-        syncStatus: 'connected',
-        syncMessage: 'Seluruh data berhasil disimpan ke Google Sheets',
-        lastSyncTime: new Date().toLocaleTimeString('id-ID')
+    const currentData = dataRef.current;
+
+    // Jika data siswa berkapasitas besar (> 500, misal 3000 siswa), gunakan chunked push agar anti-timeout
+    if (currentData.siswa && currentData.siswa.length > 500) {
+      const siswaRes = await pushSiswaToGoogleSheets(url, currentData.siswa, (p) => {
+        updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: p.message });
       });
-      return { success: true, message: 'Data berhasil diunggah ke Google Sheets!' };
+
+      if (!siswaRes.success) {
+        updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: siswaRes.message });
+        return { success: false, message: siswaRes.message };
+      }
+
+      // Kirim entitas lain tanpa siswa (karena sudah tersimpan dengan chunking)
+      const nonSiswaData = {
+        guruWali: currentData.guruWali,
+        akun: currentData.akun,
+        jurnal: currentData.jurnal,
+        presensi: currentData.presensi,
+        rujukanBK: currentData.rujukanBK,
+        jadwal: currentData.jadwal
+      };
+      const otherRes = await pushAllToGoogleSheets(url, nonSiswaData);
+      if (otherRes.success) {
+        updateGoogleSheetsConfig({
+          syncStatus: 'connected',
+          syncMessage: `Seluruh data (${currentData.siswa.length} siswa, pendidik, akun, jurnal) tersimpan aman ke Google Sheets`,
+          lastSyncTime: new Date().toLocaleTimeString('id-ID')
+        });
+        return { success: true, message: `Seluruh data termasuk ${currentData.siswa.length} data siswa berhasil disimpan ke Google Sheets!` };
+      } else {
+        updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: otherRes.message });
+        return { success: false, message: otherRes.message };
+      }
     } else {
-      updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: result.message });
-      return { success: false, message: result.message };
+      const result = await pushAllToGoogleSheets(url, currentData);
+      if (result.success) {
+        updateGoogleSheetsConfig({
+          syncStatus: 'connected',
+          syncMessage: 'Seluruh data berhasil disimpan ke Google Sheets',
+          lastSyncTime: new Date().toLocaleTimeString('id-ID')
+        });
+        return { success: true, message: 'Data berhasil diunggah ke Google Sheets!' };
+      } else {
+        updateGoogleSheetsConfig({ syncStatus: 'error', syncMessage: result.message });
+        return { success: false, message: result.message };
+      }
     }
   };
 
@@ -1341,6 +1457,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         testGoogleSheets,
         syncPullFromSheets,
         syncPushToSheets,
+        syncPushSiswaToSheets,
+        syncPullSiswaFromSheets,
         addSiswa,
         updateSiswa,
         deleteSiswa,
