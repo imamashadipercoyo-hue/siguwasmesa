@@ -59,10 +59,10 @@ interface AppContextType {
   googleSheetsConfig: GoogleSheetsConfig;
   updateGoogleSheetsConfig: (cfg: Partial<GoogleSheetsConfig>) => void;
   testGoogleSheets: () => Promise<{ success: boolean; message: string }>;
-  syncPullFromSheets: () => Promise<{ success: boolean; message: string }>;
+  syncPullFromSheets: (forcePull?: boolean) => Promise<{ success: boolean; message: string }>;
   syncPushToSheets: () => Promise<{ success: boolean; message: string }>;
   syncPushSiswaToSheets: (onProgress?: (info: { chunkIndex: number; totalChunks: number; percent: number; message: string }) => void) => Promise<{ success: boolean; message: string; totalSynced?: number }>;
-  syncPullSiswaFromSheets: () => Promise<{ success: boolean; message: string; totalSynced?: number }>;
+  syncPullSiswaFromSheets: (forcePull?: boolean) => Promise<{ success: boolean; message: string; totalSynced?: number }>;
 
   // Admin Master Data Actions
   addSiswa: (siswa: Omit<Siswa, 'id'>) => void;
@@ -212,20 +212,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [siswaList, setSiswaList] = useState<Siswa[]>(() => {
     try {
+      // 1. Cek penanda eksplisit jika data siswa pernah dikosongkan
       const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
       if (isCleared === 'true') {
         return [];
       }
+
+      // 2. Cek data yang tersimpan di localStorage
       const saved = localStorage.getItem(STORAGE_KEYS.SISWA);
       if (saved !== null) {
+        // Jika tersimpan sebagai string kosong atau '[]', itu adalah data kosong yang sah ([]), JANGAN kembalikan INITIAL_SISWA!
+        if (saved === '' || saved === '[]' || saved === 'null') {
+          return [];
+        }
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
+          // Jika parsed adalah array kosong [], kembalikan [], JANGAN fallback ke INITIAL_SISWA!
+          if (parsed.length === 0) {
+            return [];
+          }
           const deleted = getDeletedSiswaIds();
           return parsed.filter((s: Siswa) => !deleted.has(s.id) && !deleted.has(s.nisn));
         }
       }
-      const deleted = getDeletedSiswaIds();
-      return INITIAL_SISWA.filter(s => !deleted.has(s.id) && !deleted.has(s.nisn));
+
+      // 3. Jika sistem sudah pernah dibuka sebelumnya (DATA_VERSION ada) tetapi data siswa null/kosong,
+      // artinya data memang sengaja dikosongkan ([]), JANGAN muat INITIAL_SISWA!
+      const hasInit = localStorage.getItem(STORAGE_KEYS.DATA_VERSION);
+      if (hasInit) {
+        return [];
+      }
+
+      // Hanya untuk instalasi baru pertama kali (first run)
+      localStorage.setItem(STORAGE_KEYS.DATA_VERSION, CURRENT_DATA_VERSION);
+      localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(INITIAL_SISWA));
+      return INITIAL_SISWA;
     } catch (e) {
       console.warn('Gagal membaca siswa:', e);
       return [];
@@ -303,12 +324,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [selectedSiswaForPortal, setSelectedSiswaForPortalState] = useState<Siswa | null>(() => {
-    const savedId = localStorage.getItem(STORAGE_KEYS.PORTAL_SISWA);
-    if (savedId) {
-      const match = INITIAL_SISWA.find(s => s.id === savedId);
-      return match || INITIAL_SISWA[0];
-    }
-    return INITIAL_SISWA[0];
+    try {
+      const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
+      if (isCleared) return null;
+      const saved = localStorage.getItem(STORAGE_KEYS.SISWA);
+      if (!saved || saved === '[]' || saved === 'null') return null;
+      const list: Siswa[] = JSON.parse(saved);
+      if (Array.isArray(list) && list.length > 0) {
+        const savedId = localStorage.getItem(STORAGE_KEYS.PORTAL_SISWA);
+        if (savedId) {
+          const match = list.find(s => s.id === savedId);
+          if (match) return match;
+        }
+        return list[0];
+      }
+    } catch (e) {}
+    return null;
   });
 
   const [portalLoginError, setPortalLoginError] = useState<string | null>(null);
@@ -328,6 +359,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(siswaList));
+    if (siswaList.length === 0) {
+      localStorage.setItem(STORAGE_KEYS.SISWA_CLEARED_FLAG, 'true');
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+    }
   }, [siswaList]);
 
   useEffect(() => {
@@ -620,7 +656,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [siswaList, guruWaliList, akunList, jurnalList, presensiList, rujukanBKList, jadwalList]);
 
-  const syncPullFromSheets = async (): Promise<{ success: boolean; message: string }> => {
+  const syncPullFromSheets = async (forcePull = false): Promise<{ success: boolean; message: string }> => {
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
     if (!url) {
       return { success: false, message: 'URL Apps Script belum diisi' };
@@ -629,12 +665,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const result = await fetchAllFromGoogleSheets(url);
     if (result.success && result.data) {
       // 1. Siswa
-      if (Array.isArray(result.data.siswa)) {
-        const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
-        if (isCleared && result.data.siswa.length === 0) {
+      // PERLINDUNGAN AUTO SYNC: Jika tabel siswa dalam kondisi kosong ([]),
+      // JANGAN lakukan penarikan atau pemulihan data siswa dari Google Sheets!
+      const isSiswaCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
+      const isSiswaLocallyEmpty = isSiswaCleared ||
+                                  dataRef.current.siswa.length === 0 ||
+                                  localStorage.getItem(STORAGE_KEYS.SISWA) === '[]';
+
+      if (isSiswaLocallyEmpty && !forcePull) {
+        // Pertahankan tabel siswa tetap kosong ([]), jangan timpa dengan baris lama Google Sheets
+        setSiswaList([]);
+      } else if (Array.isArray(result.data.siswa)) {
+        if (result.data.siswa.length === 0) {
           setSiswaList([]);
-        } else if (!isCleared && result.data.siswa.length > 0) {
-          const deleted = getDeletedSiswaIds();
+        } else {
+          const deleted = forcePull ? new Set<string>() : getDeletedSiswaIds();
           const normalizedSiswa: Siswa[] = result.data.siswa
             .filter((s: any) => {
               const id = String(s.id || '').trim();
@@ -788,7 +833,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const syncPullSiswaFromSheets = async (): Promise<{ success: boolean; message: string; totalSynced?: number }> => {
+  const syncPullSiswaFromSheets = async (forcePull = false): Promise<{ success: boolean; message: string; totalSynced?: number }> => {
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
     if (!url) {
       return { success: false, message: 'URL Apps Script belum diisi' };
@@ -800,8 +845,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const result = await fetchSiswaFromGoogleSheets(url);
     if (result.success && Array.isArray(result.data)) {
       const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
-      const deleted = getDeletedSiswaIds();
-      const normalizedSiswa: Siswa[] = (isCleared && result.data.length === 0)
+      const isSiswaTableEmpty = isCleared ||
+                                dataRef.current.siswa.length === 0 ||
+                                localStorage.getItem(STORAGE_KEYS.SISWA) === '[]';
+
+      // Jika tabel siswa dikosongkan dan bukan penarikan manual paksa (forcePull = false),
+      // JANGAN timpa tabel kosong dengan baris lama dari Google Sheets!
+      if (isSiswaTableEmpty && !forcePull) {
+        setSiswaList([]);
+        updateGoogleSheetsConfig({
+          syncStatus: 'connected',
+          syncMessage: `Tabel siswa dalam kondisi bersih/kosong (0 data)`,
+          lastSyncTime: new Date().toLocaleTimeString('id-ID')
+        });
+        return {
+          success: true,
+          message: 'Tabel siswa tetap kosong ([]). Penarikan data dilewati karena tabel siswa dalam kondisi kosong/dikosongkan.',
+          totalSynced: 0
+        };
+      }
+
+      if (forcePull) {
+        try {
+          localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+        } catch (e) {}
+      }
+
+      const deleted = forcePull ? new Set<string>() : getDeletedSiswaIds();
+      const normalizedSiswa: Siswa[] = (result.data.length === 0)
         ? []
         : result.data
             .filter((s: any) => {

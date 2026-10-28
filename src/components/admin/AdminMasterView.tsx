@@ -635,7 +635,11 @@ export const AdminMasterView: React.FC = () => {
                               + Import Excel Siswa
                             </button>
                             <button
-                              onClick={() => syncPullSiswaFromSheets()}
+                              onClick={async () => {
+                                if (window.confirm('Unduh dan isi kembali data siswa dari Google Sheets?')) {
+                                  await syncPullSiswaFromSheets(true);
+                                }
+                              }}
                               className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs cursor-pointer shadow-xs"
                             >
                               Tarik dari Google Sheets
