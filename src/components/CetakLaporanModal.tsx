@@ -21,7 +21,8 @@ export const CetakLaporanModal: React.FC<CetakLaporanModalProps> = ({ isOpen, on
     siswaList,
     jurnalList,
     presensiList,
-    jadwalList
+    jadwalList,
+    schoolProfile
   } = useApp();
 
   const [jenisLaporan, setJenisLaporan] = useState<'jurnal' | 'presensi' | 'karakter' | 'panggilan'>('jurnal');
@@ -105,20 +106,20 @@ export const CetakLaporanModal: React.FC<CetakLaporanModalProps> = ({ isOpen, on
                   CABANG DINAS PENDIDIKAN WILAYAH JEMBER
                 </h5>
                 <h2 className="text-base sm:text-xl font-sans font-black tracking-tight text-slate-950 uppercase mt-0.5">
-                  SEKOLAH MENENGAH KEJURUAN NEGERI 1 JEMBER
+                  {schoolProfile.namaSekolah}
                 </h2>
                 <p className="text-[10px] sm:text-[11px] font-sans text-slate-600">
-                  Jalan Jambu No. 17 Telp. (0331) 487535 Fax. (0331) 487535 Patrang - Jember 68118
+                  {schoolProfile.alamatSekolah} Telp. {schoolProfile.teleponSekolah}
                 </p>
                 <p className="text-[9px] sm:text-[10px] font-sans text-slate-500">
-                  Website: www.smkn1jember.sch.id • Email: info@smkn1jember.sch.id
+                  Website: {schoolProfile.websiteSekolah} • Email: {schoolProfile.emailSekolah}
                 </p>
               </div>
 
               {/* Logo Resmi SMKN 1 Jember */}
               <div className="w-16 sm:w-20 shrink-0 flex items-center justify-center">
                 <img
-                  src="https://iili.io/nkO9grN.md.png"
+                  src={schoolProfile.logoSekolah || "https://iili.io/n8W0HZu.md.png"}
                   alt="Logo SMKN 1 Jember"
                   className="w-14 h-18 sm:w-16 sm:h-20 object-contain"
                 />
@@ -333,14 +334,14 @@ export const CetakLaporanModal: React.FC<CetakLaporanModalProps> = ({ isOpen, on
           <div className="mt-10 pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 font-sans text-xs">
             <div className="text-center">
               <p>Mengetahui,</p>
-              <p className="font-bold text-slate-900">Kepala SMK Negeri 1 Jember</p>
+              <p className="font-bold text-slate-900">Kepala {schoolProfile.namaSekolah}</p>
               <div className="h-16"></div>
-              <p className="font-bold underline text-slate-950">Drs. Sri Hartono, M.Pd</p>
-              <p className="text-[10px] text-slate-600">NIP. 19680714 199412 1 002</p>
+              <p className="font-bold underline text-slate-950">{schoolProfile.namaKepalaSekolah}</p>
+              <p className="text-[10px] text-slate-600">NIP. {schoolProfile.nipKepalaSekolah}</p>
             </div>
 
             <div className="text-center">
-              <p>Jember, 22 Oktober 2026</p>
+              <p>{schoolProfile.kotaTandaTangan}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
               <p className="font-bold text-slate-900">Guru Wali Kelas {currentGuruWali.kelas}</p>
               <div className="h-16"></div>
               <p className="font-bold underline text-slate-950">{currentGuruWali.nama}, {currentGuruWali.gelar}</p>

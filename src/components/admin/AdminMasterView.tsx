@@ -27,7 +27,8 @@ import {
   Layers,
   Zap,
   Clock,
-  Archive
+  Archive,
+  Building2
 } from 'lucide-react';
 import {
   exportSiswaToExcel,
@@ -41,6 +42,7 @@ import { ModalImportGuruWaliExcel } from './ModalImportGuruWaliExcel';
 import { ModalImportAkunExcel } from './ModalImportAkunExcel';
 import { PanduanAppsScriptModal } from './PanduanAppsScriptModal';
 import { BackupRestoreView } from './BackupRestoreView';
+import { PengaturanSekolahView } from './PengaturanSekolahView';
 import { DEFAULT_APPS_SCRIPT_URL, testAppsScriptConnection } from '../../services/googleSheetsService';
 
 export const DAFTAR_JURUSAN_SMKN1 = [
@@ -84,7 +86,7 @@ export const AdminMasterView: React.FC = () => {
     syncPullSiswaFromSheets
   } = useApp();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'siswa' | 'guru' | 'akun' | 'sheets' | 'backup'>('siswa');
+  const [activeAdminTab, setActiveAdminTab] = useState<'siswa' | 'guru' | 'akun' | 'sheets' | 'backup' | 'profil'>('siswa');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKelasFilter, setSelectedKelasFilter] = useState<string>('all');
   const [isSyncingSiswa, setIsSyncingSiswa] = useState(false);
@@ -481,6 +483,18 @@ export const AdminMasterView: React.FC = () => {
           >
             <Archive className="w-4 h-4 text-indigo-300" />
             <span>Backup & Restore Data</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('profil')}
+            className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeAdminTab === 'profil'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-blue-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-blue-300" />
+            <span>Profil & Kepala Sekolah</span>
           </button>
         </div>
       </div>
@@ -1414,6 +1428,11 @@ export const AdminMasterView: React.FC = () => {
       {/* TAB 5: BACKUP & RESTORE CADANGAN DATA KESELURUHAN */}
       {activeAdminTab === 'backup' && (
         <BackupRestoreView />
+      )}
+
+      {/* TAB 6: PENGATURAN PROFIL SEKOLAH & KEPALA SEKOLAH */}
+      {activeAdminTab === 'profil' && (
+        <PengaturanSekolahView />
       )}
 
       {/* MODAL IMPORT EXCEL SISWA */}

@@ -11,7 +11,9 @@ import {
   PresensiStatus,
   UserAccount,
   GoogleSheetsConfig,
-  SiguwaBackupPayload
+  SiguwaBackupPayload,
+  SchoolProfileConfig,
+  DEFAULT_SCHOOL_PROFILE
 } from '../types';
 import {
   INITIAL_GURU_WALI,
@@ -107,6 +109,10 @@ interface AppContextType {
   addKonsultasiWaliMurid: (konsul: Omit<KonsultasiWaliMurid, 'id' | 'status'>) => void;
   respondKonsultasi: (id: string, respon: string) => void;
 
+  // Pengaturan Profil Sekolah & Kepala Sekolah
+  schoolProfile: SchoolProfileConfig;
+  updateSchoolProfile: (profile: Partial<SchoolProfileConfig>) => Promise<{ success: boolean; message: string }>;
+
   // Modul Backup & Pemulihan Cadangan Sistem
   createBackupData: () => SiguwaBackupPayload;
   restoreBackupData: (payload: SiguwaBackupPayload, mode?: 'replace' | 'merge') => Promise<{ success: boolean; message: string; counts?: any }>;
@@ -119,64 +125,31 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   ROLE: 'siguwa_role',
   GURU_ID: 'siguwa_current_guru_id',
-  SISWA: 'siguwa_siswa_data',
-  GURU_LIST: 'siguwa_guru_list_data',
-  JURNAL: 'siguwa_jurnal_data',
-  PRESENSI: 'siguwa_presensi_data',
-  RUJUKAN: 'siguwa_rujukan_data',
-  JADWAL: 'siguwa_jadwal_data',
-  KONSULTASI: 'siguwa_konsultasi_data',
-  AKUN: 'siguwa_akun_data',
   GS_CONFIG: 'siguwa_google_sheets_config',
   PORTAL_SISWA: 'siguwa_portal_siswa_id',
-  AUTH_USER: 'siguwa_auth_user',
-  DATA_VERSION: 'siguwa_version_flag_v4',
-  DELETED_SISWA_IDS: 'siguwa_deleted_siswa_ids',
-  SISWA_CLEARED_FLAG: 'siguwa_siswa_cleared_flag'
+  AUTH_USER: 'siguwa_auth_user'
 };
 
-// Tombstone helpers to permanently track deleted siswa IDs/NISNs
-const getDeletedSiswaIds = (): Set<string> => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_SISWA_IDS);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set(arr);
-      }
-    }
-  } catch (e) {}
-  return new Set();
-};
-
-const saveDeletedSiswaIds = (set: Set<string>) => {
-  try {
-    localStorage.setItem(STORAGE_KEYS.DELETED_SISWA_IDS, JSON.stringify(Array.from(set)));
-  } catch (e) {}
-};
-
-const CURRENT_DATA_VERSION = 'v4_kelas_x_official_72_with_admin';
-
-// Auto-migrate if previous version was stored
+// Pembersihan otomatis: Hapus seluruh cache / penyimpanan lokal tabel entitas
+// agar sistem sepenuhnya menggunakan Google Sheets sebagai database utama
 if (typeof window !== 'undefined') {
   try {
-    const existingVer = localStorage.getItem(STORAGE_KEYS.DATA_VERSION);
-    if (existingVer !== CURRENT_DATA_VERSION) {
-      localStorage.removeItem(STORAGE_KEYS.SISWA);
-      localStorage.removeItem(STORAGE_KEYS.GURU_LIST);
-      localStorage.removeItem(STORAGE_KEYS.JURNAL);
-      localStorage.removeItem(STORAGE_KEYS.PRESENSI);
-      localStorage.removeItem(STORAGE_KEYS.RUJUKAN);
-      localStorage.removeItem(STORAGE_KEYS.JADWAL);
-      localStorage.removeItem(STORAGE_KEYS.KONSULTASI);
-      localStorage.removeItem(STORAGE_KEYS.AKUN);
-      localStorage.removeItem(STORAGE_KEYS.GURU_ID);
-      localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
-      localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
-      localStorage.setItem(STORAGE_KEYS.DATA_VERSION, CURRENT_DATA_VERSION);
-    }
+    const keysToClean = [
+      'siguwa_siswa_data',
+      'siguwa_guru_list_data',
+      'siguwa_jurnal_data',
+      'siguwa_presensi_data',
+      'siguwa_rujukan_data',
+      'siguwa_jadwal_data',
+      'siguwa_konsultasi_data',
+      'siguwa_akun_data',
+      'siguwa_deleted_siswa_ids',
+      'siguwa_siswa_cleared_flag',
+      'siguwa_version_flag_v4'
+    ];
+    keysToClean.forEach(k => localStorage.removeItem(k));
   } catch (e) {
-    console.warn('Storage migration notice:', e);
+    console.warn('Storage cleanup notice:', e);
   }
 }
 
@@ -204,99 +177,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved || 'admin';
   });
 
-  const [guruWaliList, setGuruWaliList] = useState<GuruWali[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.GURU_LIST);
-    return saved ? JSON.parse(saved) : INITIAL_GURU_WALI;
-  });
-
-  const [currentGuruWali, setCurrentGuruWaliState] = useState<GuruWali>(() => {
-    const savedId = localStorage.getItem(STORAGE_KEYS.GURU_ID);
-    const found = INITIAL_GURU_WALI.find(g => g.id === savedId);
-    return found || INITIAL_GURU_WALI[0];
-  });
-
-  const [siswaList, setSiswaList] = useState<Siswa[]>(() => {
-    try {
-      // 1. Cek penanda eksplisit jika data siswa pernah dikosongkan
-      const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-      if (isCleared === 'true') {
-        return [];
-      }
-
-      // 2. Cek data yang tersimpan di localStorage
-      const saved = localStorage.getItem(STORAGE_KEYS.SISWA);
-      if (saved !== null) {
-        // Jika tersimpan sebagai string kosong atau '[]', itu adalah data kosong yang sah ([]), JANGAN kembalikan INITIAL_SISWA!
-        if (saved === '' || saved === '[]' || saved === 'null') {
-          return [];
-        }
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Jika parsed adalah array kosong [], kembalikan [], JANGAN fallback ke INITIAL_SISWA!
-          if (parsed.length === 0) {
-            return [];
-          }
-          const deleted = getDeletedSiswaIds();
-          return parsed.filter((s: Siswa) => !deleted.has(s.id) && !deleted.has(s.nisn));
-        }
-      }
-
-      // 3. Jika sistem sudah pernah dibuka sebelumnya (DATA_VERSION ada) tetapi data siswa null/kosong,
-      // artinya data memang sengaja dikosongkan ([]), JANGAN muat INITIAL_SISWA!
-      const hasInit = localStorage.getItem(STORAGE_KEYS.DATA_VERSION);
-      if (hasInit) {
-        return [];
-      }
-
-      // Hanya untuk instalasi baru pertama kali (first run)
-      localStorage.setItem(STORAGE_KEYS.DATA_VERSION, CURRENT_DATA_VERSION);
-      localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(INITIAL_SISWA));
-      return INITIAL_SISWA;
-    } catch (e) {
-      console.warn('Gagal membaca siswa:', e);
-      return [];
-    }
-  });
-
-  const [jurnalList, setJurnalList] = useState<JurnalLayanan[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.JURNAL);
-    return saved ? JSON.parse(saved) : INITIAL_JURNAL;
-  });
-
-  const [presensiList, setPresensiList] = useState<PresensiRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PRESENSI);
-    return saved ? JSON.parse(saved) : INITIAL_PRESENSI;
-  });
-
-  const [rujukanBKList, setRujukanBKList] = useState<RujukanBK[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.RUJUKAN);
-    return saved ? JSON.parse(saved) : INITIAL_RUJUKAN_BK;
-  });
-
-  const [jadwalList, setJadwalList] = useState<JadwalPertemuan[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.JADWAL);
-    return saved ? JSON.parse(saved) : INITIAL_JADWAL;
-  });
-
-  const [konsultasiList, setKonsultasiList] = useState<KonsultasiWaliMurid[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.KONSULTASI);
-    return saved ? JSON.parse(saved) : INITIAL_KONSULTASI_WALI_MURID;
-  });
-
-  const [akunList, setAkunListState] = useState<UserAccount[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.AKUN);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return deduplicateAccounts(parsed);
-        }
-      }
-    } catch (e) {
-      console.warn('Gagal membaca akun:', e);
-    }
-    return deduplicateAccounts(INITIAL_AKUN);
-  });
+  // Data tersimpan dalam memori React dan langsung disinkronkan ke Google Sheets (tanpa localStorage)
+  const [guruWaliList, setGuruWaliList] = useState<GuruWali[]>(INITIAL_GURU_WALI);
+  const [currentGuruWali, setCurrentGuruWaliState] = useState<GuruWali>(INITIAL_GURU_WALI[0]);
+  const [siswaList, setSiswaList] = useState<Siswa[]>(INITIAL_SISWA);
+  const [jurnalList, setJurnalList] = useState<JurnalLayanan[]>(INITIAL_JURNAL);
+  const [presensiList, setPresensiList] = useState<PresensiRecord[]>(INITIAL_PRESENSI);
+  const [rujukanBKList, setRujukanBKList] = useState<RujukanBK[]>(INITIAL_RUJUKAN_BK);
+  const [jadwalList, setJadwalList] = useState<JadwalPertemuan[]>(INITIAL_JADWAL);
+  const [konsultasiList, setKonsultasiList] = useState<KonsultasiWaliMurid[]>(INITIAL_KONSULTASI_WALI_MURID);
+  const [akunList, setAkunListState] = useState<UserAccount[]>(() => deduplicateAccounts(INITIAL_AKUN));
+  const [schoolProfile, setSchoolProfile] = useState<SchoolProfileConfig>(DEFAULT_SCHOOL_PROFILE);
 
   const setAkunList = useCallback((action: React.SetStateAction<UserAccount[]>) => {
     setAkunListState(prev => {
@@ -330,28 +221,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   });
 
-  const [selectedSiswaForPortal, setSelectedSiswaForPortalState] = useState<Siswa | null>(() => {
-    try {
-      const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
-      if (isCleared) return null;
-      const saved = localStorage.getItem(STORAGE_KEYS.SISWA);
-      if (!saved || saved === '[]' || saved === 'null') return null;
-      const list: Siswa[] = JSON.parse(saved);
-      if (Array.isArray(list) && list.length > 0) {
-        const savedId = localStorage.getItem(STORAGE_KEYS.PORTAL_SISWA);
-        if (savedId) {
-          const match = list.find(s => s.id === savedId);
-          if (match) return match;
-        }
-        return list[0];
-      }
-    } catch (e) {}
-    return null;
-  });
-
+  const [selectedSiswaForPortal, setSelectedSiswaForPortalState] = useState<Siswa | null>(null);
   const [portalLoginError, setPortalLoginError] = useState<string | null>(null);
 
-  // Persistence effects
+  // Persistence effects: HANYA untuk sesi login, role, dan konfigurasi Google Sheets (Bukan data tabel sekolah)
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ROLE, currentRole);
   }, [currentRole]);
@@ -359,43 +232,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.GURU_ID, currentGuruWali.id);
   }, [currentGuruWali]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.GURU_LIST, JSON.stringify(guruWaliList));
-  }, [guruWaliList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(siswaList));
-    if (siswaList.length === 0) {
-      localStorage.setItem(STORAGE_KEYS.SISWA_CLEARED_FLAG, 'true');
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-    }
-  }, [siswaList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.JURNAL, JSON.stringify(jurnalList));
-  }, [jurnalList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(presensiList));
-  }, [presensiList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RUJUKAN, JSON.stringify(rujukanBKList));
-  }, [rujukanBKList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.JADWAL, JSON.stringify(jadwalList));
-  }, [jadwalList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.KONSULTASI, JSON.stringify(konsultasiList));
-  }, [konsultasiList]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.AKUN, JSON.stringify(akunList));
-  }, [akunList]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.GS_CONFIG, JSON.stringify(googleSheetsConfig));
@@ -641,6 +477,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Keep latest refs of all data to avoid stale closures during async sync
+  // Keep latest refs of all data to avoid stale closures during async sync
   const dataRef = useRef({
     siswa: siswaList,
     guruWali: guruWaliList,
@@ -648,7 +485,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     jurnal: jurnalList,
     presensi: presensiList,
     rujukanBK: rujukanBKList,
-    jadwal: jadwalList
+    jadwal: jadwalList,
+    schoolProfile: schoolProfile
   });
 
   useEffect(() => {
@@ -659,9 +497,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       jurnal: jurnalList,
       presensi: presensiList,
       rujukanBK: rujukanBKList,
-      jadwal: jadwalList
+      jadwal: jadwalList,
+      schoolProfile: schoolProfile
     };
-  }, [siswaList, guruWaliList, akunList, jurnalList, presensiList, rujukanBKList, jadwalList]);
+  }, [siswaList, guruWaliList, akunList, jurnalList, presensiList, rujukanBKList, jadwalList, schoolProfile]);
 
   const syncPullFromSheets = async (forcePull = false): Promise<{ success: boolean; message: string }> => {
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
@@ -671,30 +510,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateGoogleSheetsConfig({ syncStatus: 'syncing', syncMessage: 'Mengunduh data terbaru dari Google Sheets...' });
     const result = await fetchAllFromGoogleSheets(url);
     if (result.success && result.data) {
-      // 1. Siswa
-      // PERLINDUNGAN AUTO SYNC: Jika tabel siswa dalam kondisi kosong ([]),
-      // JANGAN lakukan penarikan atau pemulihan data siswa dari Google Sheets!
-      const isSiswaCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
-      const isSiswaLocallyEmpty = isSiswaCleared ||
-                                  dataRef.current.siswa.length === 0 ||
-                                  localStorage.getItem(STORAGE_KEYS.SISWA) === '[]';
-
-      if (isSiswaLocallyEmpty && !forcePull) {
-        // Pertahankan tabel siswa tetap kosong ([]), jangan timpa dengan baris lama Google Sheets
-        setSiswaList([]);
-      } else if (Array.isArray(result.data.siswa)) {
+      // 1. Siswa: Google Sheets sebagai sumber kebenaran data tunggal
+      if (Array.isArray(result.data.siswa)) {
         if (result.data.siswa.length === 0) {
           setSiswaList([]);
         } else {
-          const deleted = forcePull ? new Set<string>() : getDeletedSiswaIds();
           const normalizedSiswa: Siswa[] = result.data.siswa
-            .filter((s: any) => {
-              const id = String(s.id || '').trim();
-              const nisn = String(s.nisn || '').replace(/^'/, '').trim();
-              if (id && deleted.has(id)) return false;
-              if (nisn && deleted.has(nisn)) return false;
-              return true;
-            })
             .map((s: any, idx: number) => ({
               id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
               nisn: String(s.nisn || '').replace(/^'/, ''),
@@ -714,46 +535,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               catatanKhusus: String(s.catatanKhusus || '')
             }));
 
-          // Smart non-destructive merge: TIDAK MENGHAPUS data lokal baru dan TIDAK MENGEMBALIKAN data terhapus
-          const currentLocalSiswa = dataRef.current.siswa || [];
-          const remoteSiswaMap = new Map<string, Siswa>();
-          normalizedSiswa.forEach(s => remoteSiswaMap.set(s.nisn || s.id, s));
-
-          const mergedSiswa: Siswa[] = [];
-          const handledSiswaKeys = new Set<string>();
-
-          // 1. Pertahankan seluruh siswa lokal (jangan hapus data yang baru diedit atau baru ditambahkan)
-          currentLocalSiswa.forEach(localS => {
-            const key = localS.nisn || localS.id;
-            // Jika siswa sudah masuk daftar tombstone penghapusan, JANGAN masukkan kembali
-            if (deleted.has(localS.id) || (localS.nisn && deleted.has(localS.nisn))) {
-              return;
-            }
-            if (remoteSiswaMap.has(key)) {
-              const rem = remoteSiswaMap.get(key)!;
-              mergedSiswa.push({
-                ...rem,
-                ...localS, // Field lokal terbaru tetap diprioritaskan
-                id: localS.id || rem.id
-              });
-              handledSiswaKeys.add(key);
-            } else {
-              // Siswa lokal yang belum tersimpan di remote -> JANGAN DIHAPUS, pertahankan!
-              mergedSiswa.push(localS);
-              handledSiswaKeys.add(key);
-            }
-          });
-
-          // 2. Tambahkan siswa baru dari remote yang belum ada di lokal
-          normalizedSiswa.forEach(rem => {
-            const key = rem.nisn || rem.id;
-            if (!handledSiswaKeys.has(key) && !deleted.has(rem.id) && !deleted.has(rem.nisn)) {
-              mergedSiswa.push(rem);
-              handledSiswaKeys.add(key);
-            }
-          });
-
-          setSiswaList(mergedSiswa);
+          setSiswaList(normalizedSiswa);
         }
       }
 
@@ -922,6 +704,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setJadwalList(mergedJadwal);
       }
 
+      // 8. Profil Sekolah & Kepala Sekolah
+      if (result.data.schoolProfile || result.data.profilSekolah) {
+        const incomingProfile = result.data.schoolProfile || result.data.profilSekolah;
+        setSchoolProfile(prev => ({
+          ...prev,
+          ...incomingProfile
+        }));
+      }
+
       updateGoogleSheetsConfig({
         syncStatus: 'connected',
         syncMessage: 'Data berhasil disinkronisasi dari Google Sheets',
@@ -983,44 +774,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     const result = await fetchSiswaFromGoogleSheets(url);
     if (result.success && Array.isArray(result.data)) {
-      const isCleared = localStorage.getItem(STORAGE_KEYS.SISWA_CLEARED_FLAG) === 'true';
-      const isSiswaTableEmpty = isCleared ||
-                                dataRef.current.siswa.length === 0 ||
-                                localStorage.getItem(STORAGE_KEYS.SISWA) === '[]';
-
-      // Jika tabel siswa dikosongkan dan bukan penarikan manual paksa (forcePull = false),
-      // JANGAN timpa tabel kosong dengan baris lama dari Google Sheets!
-      if (isSiswaTableEmpty && !forcePull) {
-        setSiswaList([]);
-        updateGoogleSheetsConfig({
-          syncStatus: 'connected',
-          syncMessage: `Tabel siswa dalam kondisi bersih/kosong (0 data)`,
-          lastSyncTime: new Date().toLocaleTimeString('id-ID')
-        });
-        return {
-          success: true,
-          message: 'Tabel siswa tetap kosong ([]). Penarikan data dilewati karena tabel siswa dalam kondisi kosong/dikosongkan.',
-          totalSynced: 0
-        };
-      }
-
-      if (forcePull) {
-        try {
-          localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-        } catch (e) {}
-      }
-
-      const deleted = forcePull ? new Set<string>() : getDeletedSiswaIds();
       const normalizedSiswa: Siswa[] = (result.data.length === 0)
         ? []
         : result.data
-            .filter((s: any) => {
-              const id = String(s.id || '').trim();
-              const nisn = String(s.nisn || '').replace(/^'/, '').trim();
-              if (id && deleted.has(id)) return false;
-              if (nisn && deleted.has(nisn)) return false;
-              return true;
-            })
             .map((s: any, idx: number) => ({
               id: String(s.id && String(s.id).trim() ? s.id : `sis-${Date.now()}-${idx}`),
               nisn: String(s.nisn || '').replace(/^'/, ''),
@@ -1083,13 +839,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         jurnal: currentData.jurnal,
         presensi: currentData.presensi,
         rujukanBK: currentData.rujukanBK,
-        jadwal: currentData.jadwal
+        jadwal: currentData.jadwal,
+        schoolProfile: currentData.schoolProfile,
+        profilSekolah: currentData.schoolProfile
       };
       const otherRes = await pushAllToGoogleSheets(url, nonSiswaData);
       if (otherRes.success) {
         updateGoogleSheetsConfig({
           syncStatus: 'connected',
-          syncMessage: `Seluruh data (${currentData.siswa.length} siswa, pendidik, akun, jurnal) tersimpan aman ke Google Sheets`,
+          syncMessage: `Seluruh data (${currentData.siswa.length} siswa, pendidik, akun, profil sekolah) tersimpan rapi ke Google Sheets`,
           lastSyncTime: new Date().toLocaleTimeString('id-ID')
         });
         return { success: true, message: `Seluruh data termasuk ${currentData.siswa.length} data siswa berhasil disimpan ke Google Sheets!` };
@@ -1098,7 +856,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, message: otherRes.message };
       }
     } else {
-      const result = await pushAllToGoogleSheets(url, currentData);
+      const payload = {
+        ...currentData,
+        profilSekolah: currentData.schoolProfile
+      };
+      const result = await pushAllToGoogleSheets(url, payload);
       if (result.success) {
         updateGoogleSheetsConfig({
           syncStatus: 'connected',
@@ -1144,6 +906,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     presensiList,
     rujukanBKList,
     jadwalList,
+    schoolProfile,
     googleSheetsConfig.autoSync,
     googleSheetsConfig.appsScriptUrl
   ]);
@@ -1184,51 +947,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [googleSheetsConfig.autoSync, googleSheetsConfig.appsScriptUrl]);
 
-  // Master Siswa CRUD
-  const addSiswa = (siswa: Omit<Siswa, 'id'>) => {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-    } catch (e) {}
+  // Pengaturan Profil Sekolah & Kepala Sekolah
+  const updateSchoolProfile = async (updates: Partial<SchoolProfileConfig>): Promise<{ success: boolean; message: string }> => {
+    const updated: SchoolProfileConfig = {
+      ...schoolProfile,
+      ...updates
+    };
+    setSchoolProfile(updated);
+    dataRef.current.schoolProfile = updated;
 
-    const deletedSet = getDeletedSiswaIds();
-    if (siswa.nisn && deletedSet.has(siswa.nisn)) {
-      deletedSet.delete(siswa.nisn);
-      saveDeletedSiswaIds(deletedSet);
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (url) {
+      updateGoogleSheetsConfig({
+        syncStatus: 'syncing',
+        syncMessage: 'Menyimpan profil sekolah ke Google Sheets...'
+      });
+      try {
+        const res = await pushAllToGoogleSheets(url, {
+          ...dataRef.current,
+          schoolProfile: updated,
+          profilSekolah: updated
+        });
+        if (res.success) {
+          updateGoogleSheetsConfig({
+            syncStatus: 'connected',
+            syncMessage: 'Profil sekolah berhasil disimpan ke Google Sheets',
+            lastSyncTime: new Date().toLocaleTimeString('id-ID')
+          });
+          return { success: true, message: 'Profil dan data Kepala Sekolah berhasil disimpan langsung ke Google Sheets!' };
+        } else {
+          updateGoogleSheetsConfig({
+            syncStatus: 'error',
+            syncMessage: res.message || 'Gagal menyimpan profil ke Google Sheets'
+          });
+          return { success: false, message: res.message || 'Gagal menyimpan ke Google Sheets' };
+        }
+      } catch (err: any) {
+        return { success: false, message: err.message || 'Gagal menghubungi Google Sheets' };
+      }
     }
+    return { success: true, message: 'Profil berhasil diperbarui di memori aplikasi.' };
+  };
 
+  // Master Siswa CRUD - Langsung ke Google Sheets tanpa penyimpanan lokal (localStorage)
+  const addSiswa = (siswa: Omit<Siswa, 'id'>) => {
     const newEntry: Siswa = {
       ...siswa,
       id: `sis-${Date.now()}`
     };
-    setSiswaList(prev => [newEntry, ...prev]);
+    const nextList = [newEntry, ...siswaList];
+    setSiswaList(nextList);
+    dataRef.current.siswa = nextList;
+
+    const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
+    if (url && googleSheetsConfig.autoSync) {
+      pushSiswaToGoogleSheets(url, nextList).catch(err => {
+        console.warn('Gagal simpan siswa baru ke Google Sheets:', err);
+      });
+    }
     triggerAutoPushIfEnabled();
   };
 
   const updateSiswa = (id: string, updates: Partial<Siswa>) => {
-    setSiswaList(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    const nextList = siswaList.map(s => s.id === id ? { ...s, ...updates } : s);
+    setSiswaList(nextList);
+    dataRef.current.siswa = nextList;
     triggerAutoPushIfEnabled();
   };
 
   const deleteSiswa = (id: string) => {
-    // 1. Identifikasi siswa yang dihapus untuk dicatat ke daftar pemblokiran permanen (tombstone)
     const target = siswaList.find(s => s.id === id);
     const targetNisn = target ? target.nisn : '';
-
-    const deletedSet = getDeletedSiswaIds();
-    deletedSet.add(id);
-    if (targetNisn) {
-      deletedSet.add(targetNisn);
-    }
-    saveDeletedSiswaIds(deletedSet);
-
-    // 2. Filter seketika dari state dan localStorage agar tidak ada jeda
     const nextList = siswaList.filter(s => s.id !== id && (targetNisn ? s.nisn !== targetNisn : true));
+    
     setSiswaList(nextList);
-    try {
-      localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(nextList));
-    } catch (e) {}
-
-    // Perbarui dataRef seketika agar payload sinkronisasi tidak membawa data usang
     dataRef.current.siswa = nextList;
 
     // Jika siswa yang dihapus sedang aktif di portal wali, reset portal
@@ -1237,37 +1029,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
     }
 
-    // 3. Kirim pembaruan ke Google Sheets seketika
+    // Kirim pembaruan ke Google Sheets seketika agar baris siswa benar-benar terhapus
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
-    if (url && googleSheetsConfig.autoSync) {
-      pushSiswaToGoogleSheets(url, nextList).catch(err => {
+    if (url) {
+      updateGoogleSheetsConfig({
+        syncStatus: 'syncing',
+        syncMessage: 'Menghapus data siswa dari Google Sheets...'
+      });
+      pushSiswaToGoogleSheets(url, nextList).then(res => {
+        if (res.success) {
+          updateGoogleSheetsConfig({
+            syncStatus: 'connected',
+            syncMessage: 'Data siswa berhasil dihapus secara permanen dari Google Sheets',
+            lastSyncTime: new Date().toLocaleTimeString('id-ID')
+          });
+        }
+      }).catch(err => {
         console.warn('Gagal sinkronisasi penghapusan siswa ke Google Sheets:', err);
       });
     }
   };
 
   const clearAllSiswa = async (): Promise<{ success: boolean; message: string }> => {
-    // 1. Catat seluruh ID & NISN siswa saat ini ke daftar pemblokiran (tombstone)
-    const deletedSet = getDeletedSiswaIds();
-    siswaList.forEach(s => {
-      if (s.id) deletedSet.add(s.id);
-      if (s.nisn) deletedSet.add(s.nisn);
-    });
-    saveDeletedSiswaIds(deletedSet);
-
-    // 2. Berikan penanda permanen bahwa tabel siswa telah dikosongkan
-    try {
-      localStorage.setItem(STORAGE_KEYS.SISWA_CLEARED_FLAG, 'true');
-      localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify([]));
-    } catch (e) {}
-
-    // 3. Kosongkan state lokal & memori sesi
+    // 1. Kosongkan state lokal & memori sesi seketika (tanpa localStorage)
     setSiswaList([]);
     dataRef.current.siswa = [];
     setSelectedSiswaForPortalState(null);
     localStorage.removeItem(STORAGE_KEYS.PORTAL_SISWA);
 
-    // 4. Kosongkan otomatis di Google Spreadsheet (Tab Siswa)
+    // 2. Kosongkan otomatis di Google Spreadsheet (Tab Siswa)
     const url = googleSheetsConfig.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL;
     if (url) {
       updateGoogleSheetsConfig({
@@ -1305,17 +1095,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const importSiswaList = (newList: Partial<Siswa>[], replaceExisting = false) => {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-    } catch (e) {}
-
-    const deletedSet = getDeletedSiswaIds();
-    newList.forEach(item => {
-      if (item.id && deletedSet.has(item.id)) deletedSet.delete(item.id);
-      if (item.nisn && deletedSet.has(item.nisn)) deletedSet.delete(item.nisn);
-    });
-    saveDeletedSiswaIds(deletedSet);
-
     const formatted: Siswa[] = newList.map((item, index) => ({
       id: item.id || `sis-imp-${Date.now()}-${index}`,
       nisn: item.nisn || `009${Date.now() + index}`,
@@ -1335,12 +1114,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (replaceExisting) {
       setSiswaList(formatted);
+      dataRef.current.siswa = formatted;
     } else {
       // Upsert by NISN
       setSiswaList(prev => {
         const existingMap = new Map(prev.map(s => [s.nisn, s]));
         formatted.forEach(s => existingMap.set(s.nisn, s));
-        return Array.from(existingMap.values());
+        const merged = Array.from(existingMap.values());
+        dataRef.current.siswa = merged;
+        return merged;
       });
     }
     triggerAutoPushIfEnabled();
@@ -1863,53 +1645,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // 1. Pulihkan Siswa
         const restoredSiswa = Array.isArray(backupData.siswa) ? backupData.siswa : [];
         setSiswaList(restoredSiswa);
-        localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(restoredSiswa));
-        if (restoredSiswa.length === 0) {
-          localStorage.setItem(STORAGE_KEYS.SISWA_CLEARED_FLAG, 'true');
-        } else {
-          localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-          const deleted = getDeletedSiswaIds();
-          restoredSiswa.forEach(s => {
-            if (s.id) deleted.delete(s.id);
-            if (s.nisn) deleted.delete(s.nisn);
-          });
-          saveDeletedSiswaIds(deleted);
-        }
 
         // 2. Pulihkan Guru Wali
         const restoredGuru = Array.isArray(backupData.guruWali) ? backupData.guruWali : [];
         setGuruWaliList(restoredGuru);
-        localStorage.setItem(STORAGE_KEYS.GURU_LIST, JSON.stringify(restoredGuru));
 
         // 3. Pulihkan Akun
         const restoredAkun = Array.isArray(backupData.akun) ? deduplicateAccounts(backupData.akun) : [];
         setAkunList(restoredAkun);
-        localStorage.setItem(STORAGE_KEYS.AKUN, JSON.stringify(restoredAkun));
 
         // 4. Pulihkan Jurnal
         const restoredJurnal = Array.isArray(backupData.jurnal) ? backupData.jurnal : [];
         setJurnalList(restoredJurnal);
-        localStorage.setItem(STORAGE_KEYS.JURNAL, JSON.stringify(restoredJurnal));
 
         // 5. Pulihkan Presensi
         const restoredPresensi = Array.isArray(backupData.presensi) ? backupData.presensi : [];
         setPresensiList(restoredPresensi);
-        localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(restoredPresensi));
 
         // 6. Pulihkan Rujukan BK
         const restoredRujukan = Array.isArray(backupData.rujukanBK) ? backupData.rujukanBK : [];
         setRujukanBKList(restoredRujukan);
-        localStorage.setItem(STORAGE_KEYS.RUJUKAN, JSON.stringify(restoredRujukan));
 
         // 7. Pulihkan Jadwal
         const restoredJadwal = Array.isArray(backupData.jadwal) ? backupData.jadwal : [];
         setJadwalList(restoredJadwal);
-        localStorage.setItem(STORAGE_KEYS.JADWAL, JSON.stringify(restoredJadwal));
 
         // 8. Pulihkan Konsultasi
         const restoredKonsul = Array.isArray(backupData.konsultasi) ? backupData.konsultasi : [];
         setKonsultasiList(restoredKonsul);
-        localStorage.setItem(STORAGE_KEYS.KONSULTASI, JSON.stringify(restoredKonsul));
+
+        // 9. Pulihkan Profil Sekolah jika ada
+        const restoredProfile = backupData.schoolProfile || (backupData as any).profilSekolah || schoolProfile;
+        if (backupData.schoolProfile || (backupData as any).profilSekolah) {
+          setSchoolProfile(restoredProfile);
+        }
 
         // Update dataRef
         dataRef.current = {
@@ -1919,14 +1688,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           jurnal: restoredJurnal,
           presensi: restoredPresensi,
           rujukanBK: restoredRujukan,
-          jadwal: restoredJadwal
+          jadwal: restoredJadwal,
+          schoolProfile: restoredProfile
         };
 
         triggerAutoPushIfEnabled();
 
         return {
           success: true,
-          message: `Berhasil memulihkan ${restoredSiswa.length} data siswa, ${restoredGuru.length} pendidik, ${restoredAkun.length} akun, ${restoredJurnal.length} jurnal, dan ${restoredPresensi.length} presensi (Mode Ganti Total).`,
+          message: `Berhasil memulihkan ${restoredSiswa.length} data siswa, ${restoredGuru.length} pendidik, ${restoredAkun.length} akun, ${restoredJurnal.length} jurnal, dan profil sekolah (Mode Ganti Total).`,
           counts: {
             siswa: restoredSiswa.length,
             guru: restoredGuru.length,
@@ -1945,10 +1715,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingSiswa.forEach(s => siswaMap.set(s.nisn || s.id, { ...siswaMap.get(s.nisn || s.id), ...s }));
         const mergedSiswa = Array.from(siswaMap.values());
         setSiswaList(mergedSiswa);
-        localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(mergedSiswa));
-        if (mergedSiswa.length > 0) {
-          localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
-        }
 
         // 2. Merge Guru
         const existingGuru = dataRef.current.guruWali || [];
@@ -1958,7 +1724,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingGuru.forEach(g => guruMap.set(g.nip || g.id, { ...guruMap.get(g.nip || g.id), ...g }));
         const mergedGuru = Array.from(guruMap.values());
         setGuruWaliList(mergedGuru);
-        localStorage.setItem(STORAGE_KEYS.GURU_LIST, JSON.stringify(mergedGuru));
 
         // 3. Merge Akun
         const existingAkun = dataRef.current.akun || [];
@@ -1968,7 +1733,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingAkun.forEach(a => akunMap.set(a.username || a.id, { ...akunMap.get(a.username || a.id), ...a }));
         const mergedAkun = deduplicateAccounts(Array.from(akunMap.values()));
         setAkunList(mergedAkun);
-        localStorage.setItem(STORAGE_KEYS.AKUN, JSON.stringify(mergedAkun));
 
         // 4. Merge Jurnal
         const existingJurnal = dataRef.current.jurnal || [];
@@ -1978,7 +1742,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingJurnal.forEach(j => jurnalMap.set(j.id, j));
         const mergedJurnal = Array.from(jurnalMap.values());
         setJurnalList(mergedJurnal);
-        localStorage.setItem(STORAGE_KEYS.JURNAL, JSON.stringify(mergedJurnal));
 
         // 5. Merge Presensi
         const existingPresensi = dataRef.current.presensi || [];
@@ -1988,7 +1751,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingPresensi.forEach(p => presensiMap.set(p.id || `${p.tanggal}_${p.kelas}`, p));
         const mergedPresensi = Array.from(presensiMap.values());
         setPresensiList(mergedPresensi);
-        localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(mergedPresensi));
 
         // 6. Merge Rujukan BK
         const existingRujukan = dataRef.current.rujukanBK || [];
@@ -1998,7 +1760,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingRujukan.forEach(r => rujukanMap.set(r.id, r));
         const mergedRujukan = Array.from(rujukanMap.values());
         setRujukanBKList(mergedRujukan);
-        localStorage.setItem(STORAGE_KEYS.RUJUKAN, JSON.stringify(mergedRujukan));
 
         // 7. Merge Jadwal
         const existingJadwal = dataRef.current.jadwal || [];
@@ -2008,7 +1769,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingJadwal.forEach(j => jadwalMap.set(j.id, j));
         const mergedJadwal = Array.from(jadwalMap.values());
         setJadwalList(mergedJadwal);
-        localStorage.setItem(STORAGE_KEYS.JADWAL, JSON.stringify(mergedJadwal));
 
         // 8. Merge Konsultasi
         const existingKonsul = konsultasiList || [];
@@ -2018,7 +1778,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incomingKonsul.forEach(k => konsulMap.set(k.id, k));
         const mergedKonsul = Array.from(konsulMap.values());
         setKonsultasiList(mergedKonsul);
-        localStorage.setItem(STORAGE_KEYS.KONSULTASI, JSON.stringify(mergedKonsul));
+
+        // 9. Profil Sekolah jika ada
+        if (backupData.schoolProfile || (backupData as any).profilSekolah) {
+          const incomingProfile = backupData.schoolProfile || (backupData as any).profilSekolah;
+          setSchoolProfile(prev => ({ ...prev, ...incomingProfile }));
+        }
 
         // Update dataRef
         dataRef.current = {
@@ -2028,14 +1793,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           jurnal: mergedJurnal,
           presensi: mergedPresensi,
           rujukanBK: mergedRujukan,
-          jadwal: mergedJadwal
+          jadwal: mergedJadwal,
+          schoolProfile: backupData.schoolProfile ? { ...schoolProfile, ...backupData.schoolProfile } : schoolProfile
         };
 
         triggerAutoPushIfEnabled();
 
         return {
           success: true,
-          message: `Berhasil menggabungkan data cadangan (${mergedSiswa.length} total siswa, ${mergedGuru.length} pendidik, ${mergedAkun.length} akun). Data lokal tetap aman.`,
+          message: `Berhasil menggabungkan data cadangan (${mergedSiswa.length} total siswa, ${mergedGuru.length} pendidik, ${mergedAkun.length} akun). Data disinkronkan ke Google Sheets.`,
           counts: {
             siswa: mergedSiswa.length,
             guru: mergedGuru.length,
@@ -2060,6 +1826,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setJadwalList(INITIAL_JADWAL);
     setKonsultasiList(INITIAL_KONSULTASI_WALI_MURID);
     setAkunList(INITIAL_AKUN);
+    setSchoolProfile(DEFAULT_SCHOOL_PROFILE);
     setCurrentGuruWaliState(INITIAL_GURU_WALI[0]);
     setSelectedSiswaForPortalState(INITIAL_SISWA[0]);
     setCurrentUser(null);
@@ -2085,6 +1852,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         jadwalList,
         konsultasiList,
         akunList,
+        schoolProfile,
+        updateSchoolProfile,
         googleSheetsConfig,
         updateGoogleSheetsConfig,
         testGoogleSheets,

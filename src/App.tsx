@@ -23,7 +23,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { GraduationCap, MapPin, Phone, Mail, Globe, Shield } from 'lucide-react';
 
 function AuthenticatedApp() {
-  const { currentRole, currentUser } = useApp();
+  const { currentRole, currentUser, schoolProfile } = useApp();
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
@@ -115,15 +115,19 @@ function AuthenticatedApp() {
       <footer className="no-print bg-white border-t border-slate-200 mt-auto py-6 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold">
-              <GraduationCap className="w-4 h-4 text-amber-300" />
+            <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 shadow-xs">
+              <img
+                src={schoolProfile.logoSekolah || "https://iili.io/n8W0HZu.md.png"}
+                alt="Logo SMKN 1 Jember"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <p className="font-extrabold text-slate-800">
-                SMK Negeri 1 Jember
+                {schoolProfile.namaSekolah}
               </p>
               <p className="text-[11px] text-slate-500">
-                Jl. Jambu No.17 Patrang - Jember (68118), Jawa Timur
+                {schoolProfile.alamatSekolah}
               </p>
             </div>
           </div>
@@ -131,16 +135,16 @@ function AuthenticatedApp() {
           <div className="flex flex-wrap items-center gap-4 text-[11px]">
             <span className="flex items-center gap-1 text-slate-600">
               <Phone className="w-3 h-3 text-slate-400" />
-              (0331) 487535
+              {schoolProfile.teleponSekolah}
             </span>
             <span>•</span>
             <span className="flex items-center gap-1 text-slate-600">
               <Mail className="w-3 h-3 text-slate-400" />
-              info@smkn1jember.sch.id
+              {schoolProfile.emailSekolah}
             </span>
             <span>•</span>
             <span className="text-slate-400">
-              © {new Date().getFullYear()} SIGUWA SMKN 1 Jember
+              © {new Date().getFullYear()} SIGUWA {schoolProfile.namaSekolah}
             </span>
           </div>
         </div>

@@ -143,6 +143,33 @@ export interface GoogleSheetsConfig {
   syncMessage?: string;
 }
 
+export const SMKN1_LOGO_URL = 'https://iili.io/n8W0HZu.md.png';
+export const PROV_JATIM_LOGO_URL = 'https://iili.io/nkNmwes.png';
+
+export interface SchoolProfileConfig {
+  namaSekolah: string;
+  alamatSekolah: string;
+  teleponSekolah: string;
+  emailSekolah: string;
+  websiteSekolah: string;
+  namaKepalaSekolah: string;
+  nipKepalaSekolah: string;
+  kotaTandaTangan: string;
+  logoSekolah?: string;
+}
+
+export const DEFAULT_SCHOOL_PROFILE: SchoolProfileConfig = {
+  namaSekolah: 'SMK Negeri 1 Jember',
+  alamatSekolah: 'Jalan Jambu No. 17 Patrang - Jember (68118), Jawa Timur',
+  teleponSekolah: '(0331) 487535',
+  emailSekolah: 'info@smkn1jember.sch.id',
+  websiteSekolah: 'www.smkn1jember.sch.id',
+  namaKepalaSekolah: 'Drs. Sri Hartono, M.Pd',
+  nipKepalaSekolah: '19680714 199412 1 002',
+  kotaTandaTangan: 'Jember',
+  logoSekolah: SMKN1_LOGO_URL
+};
+
 export interface SiguwaBackupPayload {
   version: string;
   appName: string;
@@ -169,5 +196,6 @@ export interface SiguwaBackupPayload {
     jadwal: JadwalPertemuan[];
     konsultasi: KonsultasiWaliMurid[];
     googleSheetsConfig?: Partial<GoogleSheetsConfig>;
+    schoolProfile?: SchoolProfileConfig;
   };
 }

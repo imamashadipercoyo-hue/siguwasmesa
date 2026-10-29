@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login } = useApp();
+  const { login, schoolProfile } = useApp();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -49,17 +49,23 @@ export const LoginPage: React.FC = () => {
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0">
-              <img src="https://iili.io/nkO9grN.md.png" alt="SMKN 1 Jember" className="w-full h-full object-contain" />
+              <img
+                src={schoolProfile?.logoSekolah || "https://iili.io/n8W0HZu.md.png"}
+                alt="SMKN 1 Jember"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-sm tracking-wide text-white">SMK NEGERI 1 JEMBER</span>
+                <span className="font-black text-sm tracking-wide text-white">
+                  {schoolProfile?.namaSekolah || "SMK NEGERI 1 JEMBER"}
+                </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   Resmi
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 line-clamp-1">
-                Jl. Jambu No.17 Patrang - Jember (68118), Jawa Timur
+                {schoolProfile?.alamatSekolah || "Jl. Jambu No.17 Patrang - Jember (68118), Jawa Timur"}
               </p>
             </div>
           </div>

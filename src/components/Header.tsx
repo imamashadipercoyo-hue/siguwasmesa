@@ -38,7 +38,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
     konsultasiList,
     rujukanBKList,
     googleSheetsConfig,
-    syncPullFromSheets
+    syncPullFromSheets,
+    schoolProfile
   } = useApp();
 
   const pendingKonsultasi = konsultasiList.filter(k => k.status === 'Menunggu Respon').length;
@@ -53,11 +54,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between text-xs gap-2">
           <div className="flex items-center gap-2 font-medium">
             <span className="inline-flex items-center justify-center bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded text-[11px] tracking-wider">
-              SMKN 1 JEMBER
+              {schoolProfile.namaSekolah.includes('SMK') ? 'SMKN 1 JEMBER' : schoolProfile.namaSekolah.toUpperCase()}
             </span>
             <span className="hidden sm:inline text-slate-300">|</span>
             <span className="text-slate-200 truncate">
-              Jl. Jambu No.17 Patrang - Jember (68118), Jawa Timur
+              {schoolProfile.alamatSekolah}
             </span>
           </div>
 
@@ -121,8 +122,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
           
           {/* Logo & Application Title */}
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white flex items-center justify-center shadow-sm p-1 border border-slate-200 shrink-0">
-              <img src="https://iili.io/nkO9grN.md.png" alt="SMKN 1 Jember" className="w-full h-full object-contain" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white flex items-center justify-center shadow-xs p-1 border border-slate-200 shrink-0">
+              <img
+                src={schoolProfile.logoSekolah || "https://iili.io/n8W0HZu.md.png"}
+                alt="SMKN 1 Jember"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">

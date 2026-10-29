@@ -38,7 +38,8 @@ var SHEET_NAMES = {
   JURNAL: 'Jurnal',
   PRESENSI: 'Presensi',
   RUJUKAN: 'RujukanBK',
-  JADWAL: 'Jadwal'
+  JADWAL: 'Jadwal',
+  PROFIL: 'ProfilSekolah'
 };
 
 // Header resmi tabel Siswa (Standar 3000 Data Terstruktur)
@@ -126,7 +127,8 @@ function doGet(e) {
           jurnal: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.JURNAL)),
           presensi: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.PRESENSI)),
           rujukanBK: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.RUJUKAN)),
-          jadwal: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.JADWAL))
+          jadwal: getSheetDataAsJson(ss.getSheetByName(SHEET_NAMES.JADWAL)),
+          profilSekolah: getProfilDataAsJson(ss.getSheetByName(SHEET_NAMES.PROFIL))
         }
       };
     } else if (action === 'getSiswa') {
@@ -191,12 +193,20 @@ function doPost(e) {
           if (payload.data.presensi) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.PRESENSI), payload.data.presensi);
           if (payload.data.rujukanBK) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.RUJUKAN), payload.data.rujukanBK);
           if (payload.data.jadwal) writeJsonToSheet(ss.getSheetByName(SHEET_NAMES.JADWAL), payload.data.jadwal);
+          if (payload.data.schoolProfile || payload.data.profilSekolah) writeProfilToSheet(ss.getSheetByName(SHEET_NAMES.PROFIL), payload.data.schoolProfile || payload.data.profilSekolah);
         }
         result = {
           success: true,
           message: 'Sinkronisasi menyeluruh ke Google Sheets berhasil disimpan!',
           timestamp: new Date().toISOString()
         };
+        break;
+
+      case 'saveProfilSekolah':
+        if (payload.profilSekolah || payload.schoolProfile) {
+          writeProfilToSheet(ss.getSheetByName(SHEET_NAMES.PROFIL), payload.profilSekolah || payload.schoolProfile);
+        }
+        result = { success: true, message: 'Profil sekolah & data Kepala Sekolah berhasil disimpan di Google Sheets.' };
         break;
 
       case 'saveSiswaList':
@@ -920,6 +930,46 @@ function getSheetDataAsJson(sheet) {
   return result;
 }
 
+function writeProfilToSheet(sheet, profil) {
+  if (!sheet || !profil) return;
+  sheet.clearContents();
+  var rows = [
+    ['Parameter Pengaturan', 'Nilai / Keterangan'],
+    ['namaSekolah', profil.namaSekolah || 'SMK Negeri 1 Jember'],
+    ['alamatSekolah', profil.alamatSekolah || 'Jl. Jambu No. 17 Patrang'],
+    ['telepon', profil.telepon || '(0331) 487535'],
+    ['email', profil.email || 'smkn1jember@yahoo.com'],
+    ['website', profil.website || 'www.smkn1jember.sch.id'],
+    ['namaKepalaSekolah', profil.namaKepalaSekolah || 'Drs. Sri Hartono, M.Pd'],
+    ['nipKepalaSekolah', profil.nipKepalaSekolah ? "'" + String(profil.nipKepalaSekolah).replace(/^'/, '') : "'19670512 199412 1 002"],
+    ['kotaTandaTangan', profil.kotaTandaTangan || 'Jember'],
+    ['logoSekolah', profil.logoSekolah || 'https://iili.io/n8W0HZu.md.png']
+  ];
+  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  var headerRange = sheet.getRange(1, 1, 1, 2);
+  headerRange.setBackground('#1e3a8a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  sheet.setColumnWidth(1, 200);
+  sheet.setColumnWidth(2, 400);
+}
+
+function getProfilDataAsJson(sheet) {
+  if (!sheet) return null;
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return null;
+  var values = sheet.getRange(1, 1, lastRow, 2).getValues();
+  var result = {};
+  for (var r = 1; r < values.length; r++) {
+    var key = String(values[r][0] || '').trim();
+    var val = String(values[r][1] || '').replace(/^'/, '').trim();
+    if (key) {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 function checkAndInitSheets(ss) {
   var sheetNames = [
     SHEET_NAMES.SISWA,
@@ -928,7 +978,8 @@ function checkAndInitSheets(ss) {
     SHEET_NAMES.JURNAL,
     SHEET_NAMES.PRESENSI,
     SHEET_NAMES.RUJUKAN,
-    SHEET_NAMES.JADWAL
+    SHEET_NAMES.JADWAL,
+    SHEET_NAMES.PROFIL
   ];
 
   for (var i = 0; i < sheetNames.length; i++) {
