@@ -13,7 +13,8 @@ import {
   Cloud,
   RefreshCw,
   Database,
-  LogOut
+  LogOut,
+  BookOpen
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -263,6 +264,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
               </div>
             )}
 
+            {/* Panduan Pengguna button */}
+            <button
+              onClick={() => setActiveTab('panduan')}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl transition-all shadow-xs cursor-pointer ${
+                activeTab === 'panduan'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+              }`}
+              title="Buka Halaman Panduan Pengguna & Siklus Nilai Karakter"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Panduan Pengguna</span>
+            </button>
+
             {/* Print Official Report button */}
             <button
               onClick={onOpenPrint}
@@ -385,6 +400,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
                   {pendingKonsultasi}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('panduan')}
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'panduan'
+                  ? 'bg-blue-50 text-blue-700 font-bold border-b-2 border-blue-600'
+                  : 'hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <span>📖 Panduan Pengguna</span>
             </button>
           </nav>
         )}

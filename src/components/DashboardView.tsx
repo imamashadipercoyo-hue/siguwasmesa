@@ -16,8 +16,23 @@ import {
   Home,
   MessageSquare,
   TrendingUp,
-  UserCheck
+  UserCheck,
+  BarChart3,
+  PieChart as PieIcon
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RechartsTooltip,
+  Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid
+} from 'recharts';
 import { LayananType } from '../types';
 
 interface DashboardViewProps {
@@ -25,6 +40,27 @@ interface DashboardViewProps {
   onNavigateTab: (tab: string) => void;
   onOpenPrint: () => void;
 }
+
+const CustomCharacterTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const item = payload[0].payload;
+    return (
+      <div className="bg-slate-900/95 backdrop-blur-xs text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+          <span className="font-extrabold text-slate-100">{item.name}</span>
+        </div>
+        <p className="text-slate-200">
+          Populasi: <strong className="text-amber-300 text-sm font-black">{item.value}</strong> Siswa ({item.percentage}%)
+        </p>
+        <p className="text-[10px] text-slate-400 border-t border-slate-800 pt-1 leading-tight">
+          {item.desc}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenModalInputJurnal,
@@ -42,6 +78,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   } = useApp();
 
   const [attendanceRange, setAttendanceRange] = useState<'all' | 'class'>('class');
+  const [characterScope, setCharacterScope] = useState<'all' | 'class'>('class');
+  const [characterChartType, setCharacterChartType] = useState<'donut' | 'bar'>('donut');
 
   // Filter siswa kelas yang diampu guru wali aktif
   const kelasSiswa = siswaList.filter(s => s.kelas === currentGuruWali.kelas);
@@ -59,6 +97,58 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Siswa status pendampingan
   const siswaPerhatianKhusus = targetSiswaList.filter(s => s.statusPendampingan === 'Perhatian Khusus' || s.statusPendampingan === 'Dalam Penanganan BK');
   const siswaBerprestasi = targetSiswaList.filter(s => s.statusPendampingan === 'Siswa Berprestasi');
+
+  // Perhitungan Real-Time Distribusi Status Karakter untuk Recharts (Normal, Caution, Warning, Berprestasi)
+  const charTargetSiswa = characterScope === 'class' ? kelasSiswa : siswaList;
+  const totalCharSiswa = charTargetSiswa.length || 1;
+
+  const normalCount = charTargetSiswa.filter(s => s.statusPendampingan === 'Normal').length;
+  const cautionCount = charTargetSiswa.filter(s => s.statusPendampingan === 'Perhatian Khusus').length;
+  const warningCount = charTargetSiswa.filter(s => s.statusPendampingan === 'Dalam Penanganan BK').length;
+  const prestasiCount = charTargetSiswa.filter(s => s.statusPendampingan === 'Siswa Berprestasi').length;
+
+  const characterStatusData = [
+    {
+      name: 'Normal (Standar Baku)',
+      shortName: 'Normal',
+      statusKey: 'Normal',
+      value: normalCount,
+      percentage: Math.round((normalCount / totalCharSiswa) * 100),
+      color: '#3B82F6',
+      badgeStyle: 'bg-blue-100 text-blue-800 border-blue-300',
+      desc: 'Standar etika baik, tugas tuntas & presensi aman'
+    },
+    {
+      name: 'Caution (Perhatian Khusus)',
+      shortName: 'Caution',
+      statusKey: 'Perhatian Khusus',
+      value: cautionCount,
+      percentage: Math.round((cautionCount / totalCharSiswa) * 100),
+      color: '#F59E0B',
+      badgeStyle: 'bg-amber-100 text-amber-800 border-amber-300',
+      desc: 'Perlu bimbingan guru wali (absensi / motivasi belajar)'
+    },
+    {
+      name: 'Warning (Penanganan BK)',
+      shortName: 'Warning',
+      statusKey: 'Dalam Penanganan BK',
+      value: warningCount,
+      percentage: Math.round((warningCount / totalCharSiswa) * 100),
+      color: '#EF4444',
+      badgeStyle: 'bg-rose-100 text-rose-800 border-rose-300',
+      desc: 'Atensi khusus / kasus aktif dalam penanganan Guru BK'
+    },
+    {
+      name: 'Siswa Berprestasi',
+      shortName: 'Prestasi',
+      statusKey: 'Siswa Berprestasi',
+      value: prestasiCount,
+      percentage: Math.round((prestasiCount / totalCharSiswa) * 100),
+      color: '#10B981',
+      badgeStyle: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      desc: 'Kedisiplinan prima, teladan kelas & berprestasi'
+    }
+  ];
   
   // Rata-rata nilai kelas
   const avgNilai = kelasSiswa.length > 0 
@@ -328,6 +418,202 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* REAL-TIME DATA VISUALIZATION: DISTRIBUSI STATUS KARAKTER SISWA (RECHARTS) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full mb-1 border border-blue-200">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>Real-Time Analytics • Recharts</span>
+            </div>
+            <h3 className="font-extrabold text-slate-900 text-base sm:text-lg flex items-center gap-2">
+              <PieIcon className="w-5 h-5 text-blue-600" />
+              <span>Distribusi Status Karakter Peserta Didik</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Pemantauan proporsi status karakter siswa (Normal, Caution, Warning) yang diperbarui secara langsung dari database
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Scope Filter */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setCharacterScope('class')}
+                className={`px-3 py-1 rounded-lg cursor-pointer transition-all ${
+                  characterScope === 'class'
+                    ? 'bg-white text-blue-700 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Kelas {currentGuruWali.kelas} ({kelasSiswa.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCharacterScope('all')}
+                className={`px-3 py-1 rounded-lg cursor-pointer transition-all ${
+                  characterScope === 'all'
+                    ? 'bg-white text-blue-700 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Semua Siswa ({siswaList.length})
+              </button>
+            </div>
+
+            {/* Chart Type Toggle */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setCharacterChartType('donut')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg cursor-pointer transition-all ${
+                  characterChartType === 'donut'
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Tampilan Diagram Donut"
+              >
+                <PieIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Donut</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCharacterChartType('bar')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg cursor-pointer transition-all ${
+                  characterChartType === 'bar'
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Tampilan Grafik Batang"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Batang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart + Metrics Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          {/* Chart Canvas */}
+          <div className="lg:col-span-5 flex flex-col items-center justify-center p-3 bg-slate-50/70 rounded-2xl border border-slate-100 min-h-[280px]">
+            <div className="w-full h-64 sm:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                {characterChartType === 'donut' ? (
+                  <PieChart>
+                    <RechartsTooltip content={<CustomCharacterTooltip />} />
+                    <Pie
+                      data={characterStatusData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="46%"
+                      innerRadius={55}
+                      outerRadius={85}
+                      paddingAngle={4}
+                    >
+                      {characterStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} stroke="#ffffff" strokeWidth={2} />
+                      ))}
+                    </Pie>
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(val: string) => {
+                        const item = characterStatusData.find(d => d.name === val);
+                        return <span className="text-[11px] font-semibold text-slate-700">{item ? `${item.shortName} (${item.value})` : val}</span>;
+                      }}
+                    />
+                  </PieChart>
+                ) : (
+                  <BarChart
+                    data={characterStatusData}
+                    margin={{ top: 20, right: 15, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="shortName"
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#475569' }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: '#64748B' }}
+                    />
+                    <RechartsTooltip content={<CustomCharacterTooltip />} />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                      {characterStatusData.map((entry, index) => (
+                        <Cell key={`bar-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+            <span className="text-[11px] text-slate-400 mt-1">
+              Total Sampel: <strong className="text-slate-700">{totalCharSiswa} Siswa</strong> Teranalisis
+            </span>
+          </div>
+
+          {/* Metrics Distribution Cards */}
+          <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {characterStatusData.map((item, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-xs space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="font-extrabold text-xs text-slate-800">{item.name}</span>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${item.badgeStyle}`}>
+                    {item.percentage}%
+                  </span>
+                </div>
+
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-slate-900">{item.value}</span>
+                  <span className="text-xs text-slate-500">dari {totalCharSiswa} siswa</span>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">
+                  {item.desc}
+                </p>
+
+                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${item.percentage}%`,
+                      backgroundColor: item.color
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer recommendation bar */}
+        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-600">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>
+              Status <strong>Caution ({cautionCount})</strong> & <strong>Warning ({warningCount})</strong> otomatis diprioritaskan pada kartu notifikasi tindak lanjut.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('siswa')}
+            className="text-blue-700 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer shrink-0"
+          >
+            <span>Buka Data Siswa Bimbingan</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 

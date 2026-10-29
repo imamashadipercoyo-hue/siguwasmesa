@@ -17,6 +17,7 @@ import { PortalWaliMuridView } from './components/PortalWaliMuridView';
 import { AdminMasterView } from './components/admin/AdminMasterView';
 import { ModalInputJurnal } from './components/ModalInputJurnal';
 import { CetakLaporanModal } from './components/CetakLaporanModal';
+import { PanduanPenggunaView } from './components/PanduanPenggunaView';
 import { LayananType, JurnalLayanan } from './types';
 import { LoginPage } from './components/auth/LoginPage';
 import { GraduationCap, MapPin, Phone, Mail, Globe, Shield } from 'lucide-react';
@@ -63,7 +64,9 @@ function AuthenticatedApp() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-6 py-5 sm:py-6">
-        {currentRole === 'admin' ? (
+        {activeTab === 'panduan' ? (
+          <PanduanPenggunaView onNavigateTab={(tab) => setActiveTab(tab)} />
+        ) : currentRole === 'admin' ? (
           <AdminMasterView />
         ) : currentRole === 'wali_murid' ? (
           <PortalWaliMuridView />
