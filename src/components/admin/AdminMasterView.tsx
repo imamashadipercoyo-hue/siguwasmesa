@@ -43,6 +43,7 @@ import { ModalImportAkunExcel } from './ModalImportAkunExcel';
 import { PanduanAppsScriptModal } from './PanduanAppsScriptModal';
 import { BackupRestoreView } from './BackupRestoreView';
 import { PengaturanSekolahView } from './PengaturanSekolahView';
+import { ModalPengaturanSekolah } from './ModalPengaturanSekolah';
 import { DEFAULT_APPS_SCRIPT_URL, testAppsScriptConnection } from '../../services/googleSheetsService';
 
 export const DAFTAR_JURUSAN_SMKN1 = [
@@ -64,6 +65,7 @@ export const AdminMasterView: React.FC = () => {
     siswaList,
     guruWaliList,
     akunList,
+    schoolProfile,
     addSiswa,
     updateSiswa,
     deleteSiswa,
@@ -87,6 +89,7 @@ export const AdminMasterView: React.FC = () => {
   } = useApp();
 
   const [activeAdminTab, setActiveAdminTab] = useState<'siswa' | 'guru' | 'akun' | 'sheets' | 'backup' | 'profil'>('siswa');
+  const [isModalPengaturanOpen, setIsModalPengaturanOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKelasFilter, setSelectedKelasFilter] = useState<string>('all');
   const [isSyncingSiswa, setIsSyncingSiswa] = useState(false);
@@ -392,6 +395,17 @@ export const AdminMasterView: React.FC = () => {
             <p className="text-xs sm:text-sm text-slate-300">
               Pengelolaan penuh data siswa, data guru wali/wali kelas, akun pengguna, input & export Excel, serta sinkronisasi cloud Google Sheets.
             </p>
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsModalPengaturanOpen(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md border border-blue-400/30 cursor-pointer transition-all active:scale-95"
+                title="Buka Pengaturan Nama Kepala Sekolah & Alamat Sekolah SMKN 1 Jember"
+              >
+                <Building2 className="w-3.5 h-3.5 text-amber-300" />
+                <span>Seting Kepala Sekolah & Alamat</span>
+              </button>
+            </div>
           </div>
 
           {/* Cloud Sync Status Pill */}
@@ -490,11 +504,14 @@ export const AdminMasterView: React.FC = () => {
             className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeAdminTab === 'profil'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'text-blue-400 hover:text-white hover:bg-white/5'
+                : 'text-blue-300 hover:text-white hover:bg-white/10'
             }`}
           >
-            <Building2 className="w-4 h-4 text-blue-300" />
-            <span>Profil & Kepala Sekolah</span>
+            <Building2 className="w-4 h-4 text-amber-300" />
+            <span>Seting Kepala Sekolah & Alamat</span>
+            <span className="bg-amber-400 text-slate-950 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+              Seting
+            </span>
           </button>
         </div>
       </div>
@@ -1032,6 +1049,63 @@ export const AdminMasterView: React.FC = () => {
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Akun Baru</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Dedicated Admin Card for Nama Kepala Sekolah & Alamat Sekolah */}
+          <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-md border border-blue-800/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-xs border border-white/20 p-1.5 flex items-center justify-center shrink-0 shadow-inner">
+                <img
+                  src={schoolProfile.logoSekolah || 'https://iili.io/n8W0HZu.md.png'}
+                  alt="Logo SMKN 1 Jember"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 uppercase tracking-wider">
+                    Pengaturan Akun Admin
+                  </span>
+                  <span className="text-xs text-blue-200 font-medium">Identitas Resmi & Legalisasi Raport/Surat</span>
+                </div>
+                <h4 className="text-base sm:text-lg font-black text-white tracking-tight">
+                  {schoolProfile.namaSekolah}
+                </h4>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-200 font-medium pt-0.5">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Kepala Sekolah:</span>
+                    <strong className="text-white font-bold">{schoolProfile.namaKepalaSekolah}</strong>
+                    {schoolProfile.nipKepalaSekolah && (
+                      <span className="text-slate-300 font-mono text-[11px]">(NIP. {schoolProfile.nipKepalaSekolah})</span>
+                    )}
+                  </span>
+                  <span className="hidden sm:inline text-slate-500">•</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Alamat:</span>
+                    <strong className="text-white font-bold">{schoolProfile.alamatSekolah}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0 pt-2 md:pt-0">
+              <button
+                type="button"
+                onClick={() => setIsModalPengaturanOpen(true)}
+                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-md cursor-pointer transition-all active:scale-95"
+              >
+                <Building2 className="w-4 h-4 text-slate-950" />
+                <span>Seting Kepala Sekolah & Alamat</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveAdminTab('profil')}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/15 cursor-pointer transition-colors"
+                title="Buka tab pengaturan profil lengkap sekolah"
+              >
+                <span>Kelola Profil Lengkap</span>
               </button>
             </div>
           </div>

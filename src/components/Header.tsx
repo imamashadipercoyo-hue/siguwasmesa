@@ -17,6 +17,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { UserRole } from '../types';
+import { ModalPengaturanSekolah } from './admin/ModalPengaturanSekolah';
 
 interface HeaderProps {
   onOpenPrint: () => void;
@@ -46,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
   const pendingBK = rujukanBKList.filter(r => r.status === 'Menunggu Verifikasi').length;
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showPengaturanModal, setShowPengaturanModal] = useState(false);
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
@@ -292,6 +294,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
               <span className="hidden sm:inline">Cetak Laporan</span>
             </button>
 
+            {/* Seting Kepala Sekolah & Alamat Sekolah (Khusus Akun Admin) */}
+            {currentRole === 'admin' && (
+              <button
+                type="button"
+                onClick={() => setShowPengaturanModal(true)}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-800 border border-blue-200 text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                title="Pengaturan Nama Kepala Sekolah & Alamat Sekolah SMKN 1 Jember"
+              >
+                <Building2 className="w-3.5 h-3.5 text-blue-700" />
+                <span className="hidden sm:inline">Seting Kepala Sekolah & Alamat</span>
+                <span className="sm:hidden">Seting</span>
+              </button>
+            )}
+
             {/* Current Logged In User Info & Logout Button */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
               <div className="hidden xl:flex flex-col text-right">
@@ -464,6 +480,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPrint, activeTab, setActiv
           </div>
         </div>
       )}
+
+      {/* Modal Pengaturan Sekolah & Kepala Sekolah untuk Akun Admin */}
+      <ModalPengaturanSekolah
+        isOpen={showPengaturanModal}
+        onClose={() => setShowPengaturanModal(false)}
+      />
     </header>
   );
 };
