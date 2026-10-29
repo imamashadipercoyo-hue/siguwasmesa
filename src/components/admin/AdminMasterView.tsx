@@ -25,7 +25,8 @@ import {
   Briefcase,
   ShieldCheck,
   Layers,
-  Zap
+  Zap,
+  Clock
 } from 'lucide-react';
 import {
   exportSiswaToExcel,
@@ -1292,124 +1293,60 @@ export const AdminMasterView: React.FC = () => {
               </div>
             )}
 
-            {/* Auto sync toggle */}
-            <div className="pt-2 flex items-center justify-between border-t border-slate-200">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="autoSyncToggle"
-                  checked={googleSheetsConfig.autoSync}
-                  onChange={(e) => updateGoogleSheetsConfig({ autoSync: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                />
-                <label htmlFor="autoSyncToggle" className="font-bold text-slate-800 cursor-pointer">
-                  Sinkronisasi Otomatis Real-time
-                </label>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                Otomatis kirim perubahan data siswa, presensi, dan jurnal ke Google Sheets.
-              </span>
-            </div>
-          </div>
-
-          {/* HIGH-PERFORMANCE 3000 SISWA CHUNKED SYNC SECTION */}
-          <div className="p-4 sm:p-5 rounded-2xl border-2 border-amber-300 bg-linear-to-r from-amber-50/80 via-orange-50/40 to-amber-50/80 space-y-3.5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] shadow-2xs">
-                  <Zap className="w-3 h-3 text-slate-950 fill-slate-950" />
-                  <span>Teknologi Batching Chunked (Kapasitas 3.000 - 10.000 Data Siswa)</span>
-                </div>
-                <h4 className="font-black text-slate-900 text-sm sm:text-base">
-                  Sinkronisasi Khusus Master Data Siswa Skala Besar
-                </h4>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Dirancang khusus agar pengunggahan 3.000+ data peserta didik tidak mengalami timeout atau koneksi terputus. Data dipecah otomatis per 750 record dan ditata rapi ke tab <strong>Siswa</strong> di Google Spreadsheet.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2.5 bg-white px-3.5 py-2.5 rounded-xl border border-amber-200 shadow-2xs shrink-0">
-                <Users className="w-5 h-5 text-amber-700" />
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 font-semibold block">Total Siswa Aktif:</span>
-                  <span className="font-black text-amber-950 text-sm">{siswaList.length} Siswa</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Real-time Progress Bar */}
-            {siswaSyncProgress && (
-              <div className="p-3.5 bg-white rounded-xl border border-amber-300 space-y-2 shadow-xs animate-in fade-in">
-                <div className="flex items-center justify-between text-xs font-bold text-amber-950">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                    <span>{siswaSyncProgress.message}</span>
-                  </span>
-                  <span className="font-mono bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md text-[11px]">
-                    {siswaSyncProgress.percent}%
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-linear-to-r from-amber-500 to-orange-500 h-2.5 rounded-full transition-all duration-300"
-                    style={{ width: `${siswaSyncProgress.percent}%` }}
+            {/* Auto sync toggle & Interval Setting */}
+            <div className="pt-3 border-t border-slate-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="autoSyncToggle"
+                    checked={googleSheetsConfig.autoSync}
+                    onChange={(e) => updateGoogleSheetsConfig({ autoSync: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                   />
+                  <label htmlFor="autoSyncToggle" className="font-bold text-slate-800 cursor-pointer text-xs sm:text-sm">
+                    Sinkronisasi Otomatis Real-time
+                  </label>
+                  {googleSheetsConfig.autoSync && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Aktif
+                    </span>
+                  )}
+                </div>
+
+                {/* Setting Waktu Interval Auto Sinkron */}
+                <div className="flex items-center gap-2 text-xs">
+                  <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="text-slate-600 font-semibold text-xs whitespace-nowrap">Interval Waktu:</span>
+                  <select
+                    disabled={!googleSheetsConfig.autoSync}
+                    value={googleSheetsConfig.syncIntervalSeconds ?? 30}
+                    onChange={(e) => updateGoogleSheetsConfig({ syncIntervalSeconds: Number(e.target.value) })}
+                    className="bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-300 rounded-xl px-2.5 py-1 font-bold text-slate-800 text-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value={15}>15 Detik (Cepat)</option>
+                    <option value={30}>30 Detik (Standar Rekomendasi)</option>
+                    <option value={60}>1 Menit</option>
+                    <option value={120}>2 Menit</option>
+                    <option value={300}>5 Menit (Hemat Kuota)</option>
+                    <option value={600}>10 Menit</option>
+                    <option value={0}>Manual (Hanya saat Simpan / Edit)</option>
+                  </select>
                 </div>
               </div>
-            )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
-              <button
-                type="button"
-                disabled={isSyncingSiswa || !googleSheetsConfig.appsScriptUrl}
-                onClick={async () => {
-                  setIsSyncingSiswa(true);
-                  setSiswaSyncProgress({ percent: 5, message: 'Menyiapkan batching 3.000 data siswa...' });
-                  const res = await syncPushSiswaToSheets((p) => {
-                    setSiswaSyncProgress({ percent: p.percent, message: p.message });
-                  });
-                  setIsSyncingSiswa(false);
-                  setTimeout(() => setSiswaSyncProgress(null), 3500);
-                  alert(res.message);
-                }}
-                className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-2 transition-all"
-              >
-                <Zap className="w-4 h-4 text-amber-200 fill-amber-200" />
-                <span>{isSyncingSiswa ? 'Sedang Mengunggah Batch...' : `Unggah Seluruh ${siswaList.length} Siswa ke Google Sheets`}</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isSyncingSiswa || !googleSheetsConfig.appsScriptUrl}
-                onClick={async () => {
-                  setIsSyncingSiswa(true);
-                  const res = await syncPullSiswaFromSheets();
-                  setIsSyncingSiswa(false);
-                  alert(res.message);
-                }}
-                className="w-full py-2.5 px-4 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-2 transition-all"
-              >
-                <Cloud className="w-4 h-4 text-blue-200" />
-                <span>Unduh Cepat Data Siswa Saja dari Sheets (1-Call)</span>
-              </button>
-            </div>
-
-            <div className="pt-2 border-t border-amber-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span className="text-[11px] text-slate-500 font-medium">
-                Pembersihan Database:
-              </span>
-              <button
-                type="button"
-                disabled={isClearingSiswa || siswaList.length === 0}
-                onClick={() => {
-                  setConfirmClearChecked(false);
-                  setIsClearSiswaModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 disabled:opacity-40 font-bold rounded-lg shadow-2xs cursor-pointer transition-all text-xs"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>Kosongkan Tab Siswa di Google Sheets & Aplikasi ({siswaList.length})</span>
-              </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Sistem proteksi aktif: Sinkronisasi tidak akan menghapus data lokal dan tidak mengembalikan data yang telah dihapus.</span>
+                </span>
+                <span className="font-mono text-slate-400 shrink-0">
+                  {googleSheetsConfig.autoSync
+                    ? (googleSheetsConfig.syncIntervalSeconds === 0 ? 'Mode Per-Perubahan' : `Siklus setiap ${googleSheetsConfig.syncIntervalSeconds || 30} detik`)
+                    : 'Auto-sinkron Nonaktif'}
+                </span>
+              </div>
             </div>
           </div>
 

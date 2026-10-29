@@ -308,7 +308,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...parsed,
           appsScriptUrl: parsed.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL,
-          autoSync: true,
+          autoSync: parsed.autoSync !== undefined ? parsed.autoSync : true,
+          syncIntervalSeconds: parsed.syncIntervalSeconds !== undefined ? parsed.syncIntervalSeconds : 30,
           syncStatus: 'connected',
           syncMessage: 'Terhubung ke Database Google Sheets SMKN 1 Jember'
         };
@@ -317,6 +318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       appsScriptUrl: DEFAULT_APPS_SCRIPT_URL,
       autoSync: true,
+      syncIntervalSeconds: 30,
       syncStatus: 'connected',
       syncMessage: 'Terhubung ke Database Google Sheets SMKN 1 Jember',
       lastSyncTime: new Date().toLocaleTimeString('id-ID')
@@ -706,11 +708,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               statusPendampingan: (s.statusPendampingan || 'Normal') as any,
               catatanKhusus: String(s.catatanKhusus || '')
             }));
-          setSiswaList(normalizedSiswa);
+
+          // Smart non-destructive merge: TIDAK MENGHAPUS data lokal baru dan TIDAK MENGEMBALIKAN data terhapus
+          const currentLocalSiswa = dataRef.current.siswa || [];
+          const remoteSiswaMap = new Map<string, Siswa>();
+          normalizedSiswa.forEach(s => remoteSiswaMap.set(s.nisn || s.id, s));
+
+          const mergedSiswa: Siswa[] = [];
+          const handledSiswaKeys = new Set<string>();
+
+          // 1. Pertahankan seluruh siswa lokal (jangan hapus data yang baru diedit atau baru ditambahkan)
+          currentLocalSiswa.forEach(localS => {
+            const key = localS.nisn || localS.id;
+            // Jika siswa sudah masuk daftar tombstone penghapusan, JANGAN masukkan kembali
+            if (deleted.has(localS.id) || (localS.nisn && deleted.has(localS.nisn))) {
+              return;
+            }
+            if (remoteSiswaMap.has(key)) {
+              const rem = remoteSiswaMap.get(key)!;
+              mergedSiswa.push({
+                ...rem,
+                ...localS, // Field lokal terbaru tetap diprioritaskan
+                id: localS.id || rem.id
+              });
+              handledSiswaKeys.add(key);
+            } else {
+              // Siswa lokal yang belum tersimpan di remote -> JANGAN DIHAPUS, pertahankan!
+              mergedSiswa.push(localS);
+              handledSiswaKeys.add(key);
+            }
+          });
+
+          // 2. Tambahkan siswa baru dari remote yang belum ada di lokal
+          normalizedSiswa.forEach(rem => {
+            const key = rem.nisn || rem.id;
+            if (!handledSiswaKeys.has(key) && !deleted.has(rem.id) && !deleted.has(rem.nisn)) {
+              mergedSiswa.push(rem);
+              handledSiswaKeys.add(key);
+            }
+          });
+
+          setSiswaList(mergedSiswa);
         }
       }
 
-      // 2. Guru Wali
+      // 2. Guru Wali (Safe Non-Destructive Merge)
       if (Array.isArray(result.data.guruWali) && result.data.guruWali.length > 0) {
         const normalizedGuru: GuruWali[] = result.data.guruWali.map((g: any, idx: number) => {
           const rawRole = String(g.role || g['Peran / Role'] || 'guru_wali').toLowerCase();
@@ -737,10 +779,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             statusAkun: (String(g.statusAkun || g.status || '').toLowerCase().includes('non') ? 'Nonaktif' : 'Aktif') as 'Aktif' | 'Nonaktif'
           };
         });
-        setGuruWaliList(normalizedGuru);
+
+        const currentLocalGuru = dataRef.current.guruWali || [];
+        const remoteGuruMap = new Map<string, GuruWali>();
+        normalizedGuru.forEach(g => remoteGuruMap.set(g.nip || g.id, g));
+
+        const mergedGuru: GuruWali[] = [];
+        const handledGuruKeys = new Set<string>();
+
+        currentLocalGuru.forEach(localG => {
+          const key = localG.nip || localG.id;
+          if (remoteGuruMap.has(key)) {
+            mergedGuru.push({ ...localG, ...remoteGuruMap.get(key)! });
+            handledGuruKeys.add(key);
+          } else {
+            mergedGuru.push(localG);
+            handledGuruKeys.add(key);
+          }
+        });
+
+        remoteGuruMap.forEach((remG, key) => {
+          if (!handledGuruKeys.has(key)) {
+            mergedGuru.push(remG);
+            handledGuruKeys.add(key);
+          }
+        });
+
+        setGuruWaliList(mergedGuru);
       }
 
-      // 3. Akun Pengguna
+      // 3. Akun Pengguna (Safe Non-Destructive Merge)
       if (Array.isArray(result.data.akun) && result.data.akun.length > 0) {
         const normalizedAkun: UserAccount[] = result.data.akun.map((a: any, idx: number) => ({
           id: String(a.id && String(a.id).trim() ? a.id : `usr-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`),
@@ -757,30 +825,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           telepon: a.telepon !== undefined && a.telepon !== null ? String(a.telepon).replace(/^'/, '') : undefined,
           linkedId: a.linkedId ? String(a.linkedId) : undefined
         }));
-        setAkunList(deduplicateAccounts(normalizedAkun));
+
+        const currentLocalAkun = dataRef.current.akun || [];
+        const remoteAkunMap = new Map<string, UserAccount>();
+        normalizedAkun.forEach(a => remoteAkunMap.set(a.username || a.id, a));
+
+        const mergedAkun: UserAccount[] = [];
+        const handledAkunKeys = new Set<string>();
+
+        currentLocalAkun.forEach(localA => {
+          const key = localA.username || localA.id;
+          if (remoteAkunMap.has(key)) {
+            mergedAkun.push({ ...localA, ...remoteAkunMap.get(key)! });
+            handledAkunKeys.add(key);
+          } else {
+            mergedAkun.push(localA);
+            handledAkunKeys.add(key);
+          }
+        });
+
+        remoteAkunMap.forEach((remA, key) => {
+          if (!handledAkunKeys.has(key)) {
+            mergedAkun.push(remA);
+            handledAkunKeys.add(key);
+          }
+        });
+
+        setAkunList(deduplicateAccounts(mergedAkun));
       }
 
-      // 4. Jurnal
+      // 4. Jurnal (Safe Merge by ID)
       let needInitialSeedPush = false;
       if (Array.isArray(result.data.jurnal) && result.data.jurnal.length > 0) {
-        setJurnalList(result.data.jurnal);
+        const currentLocalJurnal = dataRef.current.jurnal || [];
+        const mergedJurnal: JurnalLayanan[] = [...currentLocalJurnal];
+        result.data.jurnal.forEach((remJ: JurnalLayanan) => {
+          const idx = mergedJurnal.findIndex(l => l.id === remJ.id);
+          if (idx >= 0) {
+            mergedJurnal[idx] = { ...mergedJurnal[idx], ...remJ };
+          } else {
+            mergedJurnal.push(remJ);
+          }
+        });
+        setJurnalList(mergedJurnal);
       } else {
         needInitialSeedPush = true;
       }
 
-      // 5. Presensi
+      // 5. Presensi (Safe Merge by Date & Kelas)
       if (Array.isArray(result.data.presensi) && result.data.presensi.length > 0) {
-        setPresensiList(result.data.presensi);
+        const currentLocalPresensi = dataRef.current.presensi || [];
+        const mergedPresensi: PresensiRecord[] = [...currentLocalPresensi];
+        result.data.presensi.forEach((remP: PresensiRecord) => {
+          const idx = mergedPresensi.findIndex(p => p.id === remP.id || (p.tanggal === remP.tanggal && p.kelas === remP.kelas));
+          if (idx >= 0) {
+            mergedPresensi[idx] = { ...mergedPresensi[idx], ...remP };
+          } else {
+            mergedPresensi.push(remP);
+          }
+        });
+        setPresensiList(mergedPresensi);
       }
 
-      // 6. Rujukan BK
+      // 6. Rujukan BK (Safe Merge by ID)
       if (Array.isArray(result.data.rujukanBK) && result.data.rujukanBK.length > 0) {
-        setRujukanBKList(result.data.rujukanBK);
+        const currentLocalRujukan = dataRef.current.rujukanBK || [];
+        const mergedRujukan: RujukanBK[] = [...currentLocalRujukan];
+        result.data.rujukanBK.forEach((remR: RujukanBK) => {
+          const idx = mergedRujukan.findIndex(r => r.id === remR.id);
+          if (idx >= 0) {
+            mergedRujukan[idx] = { ...mergedRujukan[idx], ...remR };
+          } else {
+            mergedRujukan.push(remR);
+          }
+        });
+        setRujukanBKList(mergedRujukan);
       }
 
-      // 7. Jadwal
+      // 7. Jadwal (Safe Merge by ID)
       if (Array.isArray(result.data.jadwal) && result.data.jadwal.length > 0) {
-        setJadwalList(result.data.jadwal);
+        const currentLocalJadwal = dataRef.current.jadwal || [];
+        const mergedJadwal: JadwalPertemuan[] = [...currentLocalJadwal];
+        result.data.jadwal.forEach((remJ: JadwalPertemuan) => {
+          const idx = mergedJadwal.findIndex(j => j.id === remJ.id);
+          if (idx >= 0) {
+            mergedJadwal[idx] = { ...mergedJadwal[idx], ...remJ };
+          } else {
+            mergedJadwal.push(remJ);
+          }
+        });
+        setJadwalList(mergedJadwal);
       }
 
       updateGoogleSheetsConfig({
@@ -1009,24 +1143,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     googleSheetsConfig.appsScriptUrl
   ]);
 
-  // Real-time continuous background sync (initial pull on load + periodic poll every 20s)
+  // Real-time continuous background sync (initial pull on load + configurable periodic interval)
   useEffect(() => {
     if (!googleSheetsConfig.appsScriptUrl || !googleSheetsConfig.autoSync) return;
 
     // Tarik data awal saat aplikasi dimuat
     syncPullFromSheets().catch(err => console.warn('Initial load pull notice:', err));
 
-    // Polling periodik setiap 20 detik secara tenang (tanpa window focus listener yang agresif)
+    // Ambil setting interval waktu dalam detik (default 30 detik). Jika 0, maka hanya saat simpan/edit (manual)
+    const intervalSeconds = googleSheetsConfig.syncIntervalSeconds ?? 30;
+    if (intervalSeconds <= 0) {
+      // Mode manual / event-driven only (tidak ada polling timer terus-menerus)
+      return;
+    }
+
+    // Polling periodik sesuai interval waktu yang diatur pengguna
     const interval = setInterval(() => {
       if (!document.hidden && navigator.onLine) {
         syncPullFromSheets().catch(err => console.warn('Real-time polling pull notice:', err));
       }
-    }, 20000);
+    }, intervalSeconds * 1000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [googleSheetsConfig.appsScriptUrl, googleSheetsConfig.autoSync]);
+  }, [googleSheetsConfig.appsScriptUrl, googleSheetsConfig.autoSync, googleSheetsConfig.syncIntervalSeconds]);
 
   // Auto Push Helper manual trigger
   const triggerAutoPushIfEnabled = useCallback(() => {

@@ -137,6 +137,7 @@ export interface GoogleSheetsConfig {
   appsScriptUrl: string;
   spreadsheetId?: string;
   autoSync: boolean;
+  syncIntervalSeconds?: number; // Setting interval auto sinkron (detik, e.g. 15, 30, 60, 120, 300, 600, atau 0 untuk nonaktif)
   lastSyncTime?: string;
   syncStatus: 'connected' | 'disconnected' | 'syncing' | 'error';
   syncMessage?: string;
