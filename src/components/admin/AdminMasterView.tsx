@@ -26,7 +26,8 @@ import {
   ShieldCheck,
   Layers,
   Zap,
-  Clock
+  Clock,
+  Archive
 } from 'lucide-react';
 import {
   exportSiswaToExcel,
@@ -39,6 +40,7 @@ import { ModalImportSiswaExcel } from './ModalImportSiswaExcel';
 import { ModalImportGuruWaliExcel } from './ModalImportGuruWaliExcel';
 import { ModalImportAkunExcel } from './ModalImportAkunExcel';
 import { PanduanAppsScriptModal } from './PanduanAppsScriptModal';
+import { BackupRestoreView } from './BackupRestoreView';
 import { DEFAULT_APPS_SCRIPT_URL, testAppsScriptConnection } from '../../services/googleSheetsService';
 
 export const DAFTAR_JURUSAN_SMKN1 = [
@@ -82,7 +84,7 @@ export const AdminMasterView: React.FC = () => {
     syncPullSiswaFromSheets
   } = useApp();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'siswa' | 'guru' | 'akun' | 'sheets'>('siswa');
+  const [activeAdminTab, setActiveAdminTab] = useState<'siswa' | 'guru' | 'akun' | 'sheets' | 'backup'>('siswa');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKelasFilter, setSelectedKelasFilter] = useState<string>('all');
   const [isSyncingSiswa, setIsSyncingSiswa] = useState(false);
@@ -467,6 +469,18 @@ export const AdminMasterView: React.FC = () => {
           >
             <Database className="w-4 h-4 text-emerald-300" />
             <span>Database Google Sheets & Apps Script</span>
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('backup')}
+            className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeAdminTab === 'backup'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-indigo-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Archive className="w-4 h-4 text-indigo-300" />
+            <span>Backup & Restore Data</span>
           </button>
         </div>
       </div>
@@ -1395,6 +1409,11 @@ export const AdminMasterView: React.FC = () => {
 
           </div>
         </div>
+      )}
+
+      {/* TAB 5: BACKUP & RESTORE CADANGAN DATA KESELURUHAN */}
+      {activeAdminTab === 'backup' && (
+        <BackupRestoreView />
       )}
 
       {/* MODAL IMPORT EXCEL SISWA */}

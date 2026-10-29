@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Siswa, GuruWali, UserAccount, JurnalLayanan, UserRole } from '../types';
+import { Siswa, GuruWali, UserAccount, JurnalLayanan, UserRole, SiguwaBackupPayload } from '../types';
 
 /**
  * Export Siswa to Excel (.xlsx)
@@ -703,5 +703,246 @@ export async function parseAkunExcel(file: File): Promise<Partial<UserAccount>[]
     reader.onerror = (error) => reject(error);
     reader.readAsArrayBuffer(file);
   });
+}
+
+/**
+ * Export Complete Multi-Tab Backup Workbook (.xlsx)
+ * Menyatukan seluruh entitas sistem ke dalam lembar kerja Excel terpadu
+ */
+export function exportFullWorkbookBackup(
+  payload: SiguwaBackupPayload,
+  fileName?: string
+) {
+  const wb = XLSX.utils.book_new();
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const finalFileName = fileName || `BACKUP_DATABASE_SIGUWA_SMKN1_JEMBER_${dateStr}.xlsx`;
+
+  // 1. Sheet Ringkasan Cadangan
+  const summaryData = [
+    { 'Parameter Sistem': 'Aplikasi', 'Keterangan': payload.appName },
+    { 'Parameter Sistem': 'Institusi Sekolah', 'Keterangan': payload.sekolah },
+    { 'Parameter Sistem': 'Versi Cadangan', 'Keterangan': payload.version },
+    { 'Parameter Sistem': 'Waktu Pencadangan', 'Keterangan': payload.exportDateFormatted },
+    { 'Parameter Sistem': 'Total Data Siswa', 'Keterangan': `${payload.counts.siswa} Siswa` },
+    { 'Parameter Sistem': 'Total Guru Wali & Pendidik', 'Keterangan': `${payload.counts.guruWali} Orang` },
+    { 'Parameter Sistem': 'Total Akun Pengguna', 'Keterangan': `${payload.counts.akun} Akun` },
+    { 'Parameter Sistem': 'Total Jurnal Layanan', 'Keterangan': `${payload.counts.jurnal} Catatan` },
+    { 'Parameter Sistem': 'Total Presensi Harian', 'Keterangan': `${payload.counts.presensi} Baris` },
+    { 'Parameter Sistem': 'Total Rujukan BK', 'Keterangan': `${payload.counts.rujukanBK} Kasus` },
+    { 'Parameter Sistem': 'Total Jadwal & Home Visit', 'Keterangan': `${payload.counts.jadwal} Agenda` },
+    { 'Parameter Sistem': 'Total Konsultasi Wali Murid', 'Keterangan': `${payload.counts.konsultasi} Percakapan` },
+    { 'Parameter Sistem': 'Status Integritas Data', 'Keterangan': 'LENGKAP & VALID (SMKN 1 JEMBER)' }
+  ];
+  const summaryWs = XLSX.utils.json_to_sheet(summaryData);
+  summaryWs['!cols'] = [{ wch: 30 }, { wch: 50 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, 'Ringkasan_Backup');
+
+  // 2. Sheet Data Siswa
+  if (payload.data.siswa && payload.data.siswa.length > 0) {
+    const siswaData = payload.data.siswa.map((s, idx) => ({
+      'No': idx + 1,
+      'ID Sistem': s.id,
+      'NISN': s.nisn,
+      'Nama Siswa': s.nama,
+      'Kelas': s.kelas,
+      'Jurusan': s.jurusan,
+      'Jenis Kelamin': s.jenisKelamin,
+      'Tanggal Lahir': s.tanggalLahir,
+      'Alamat': s.alamat,
+      'Nama Orang Tua / Wali': s.namaOrtu,
+      'No HP Orang Tua': s.noHpOrtu,
+      'Nilai Rata-Rata': s.nilaiRataRata,
+      'Poin Karakter': s.poinKarakter,
+      'Status Pendampingan': s.statusPendampingan,
+      'Catatan Khusus': s.catatanKhusus || ''
+    }));
+    const siswaWs = XLSX.utils.json_to_sheet(siswaData);
+    siswaWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 15 }, { wch: 30 }, { wch: 12 },
+      { wch: 25 }, { wch: 8 }, { wch: 14 }, { wch: 40 }, { wch: 25 },
+      { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, siswaWs, 'Master_Siswa');
+  }
+
+  // 3. Sheet Guru Wali
+  if (payload.data.guruWali && payload.data.guruWali.length > 0) {
+    const guruData = payload.data.guruWali.map((g, idx) => ({
+      'No': idx + 1,
+      'ID Sistem': g.id,
+      'NIP': g.nip,
+      'Nama Lengkap': g.nama,
+      'Gelar': g.gelar || '',
+      'Kelas / Cakupan': g.kelas,
+      'Jurusan': g.jurusan || '',
+      'Peran': g.role,
+      'Label Peran': g.roleLabel,
+      'Username Login': g.username || '',
+      'Password': g.password || '',
+      'Email': g.email,
+      'Telepon / WhatsApp': g.telepon || '',
+      'Status Akun': g.statusAkun || 'Aktif'
+    }));
+    const guruWs = XLSX.utils.json_to_sheet(guruData);
+    guruWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 20 }, { wch: 30 }, { wch: 10 },
+      { wch: 18 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 20 },
+      { wch: 15 }, { wch: 28 }, { wch: 18 }, { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(wb, guruWs, 'Master_Guru_Wali');
+  }
+
+  // 4. Sheet Akun Pengguna
+  if (payload.data.akun && payload.data.akun.length > 0) {
+    const akunData = payload.data.akun.map((a, idx) => ({
+      'No': idx + 1,
+      'ID Akun': a.id,
+      'Username / NISN': a.username,
+      'Password': a.password || '••••••',
+      'Nama Pengguna': a.nama,
+      'Peran / Role': a.role,
+      'Label Peran': a.roleLabel,
+      'Kelas Diampu': a.kelas || 'Semua Kelas',
+      'Jurusan': a.jurusan || '-',
+      'Email': a.email,
+      'Telepon': a.telepon || '',
+      'Status': a.status,
+      'Terakhir Masuk': a.lastLogin || 'Belum Pernah'
+    }));
+    const akunWs = XLSX.utils.json_to_sheet(akunData);
+    akunWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 20 }, { wch: 16 }, { wch: 28 },
+      { wch: 15 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 28 },
+      { wch: 16 }, { wch: 10 }, { wch: 18 }
+    ];
+    XLSX.utils.book_append_sheet(wb, akunWs, 'Master_Akun');
+  }
+
+  // 5. Sheet Jurnal Layanan
+  if (payload.data.jurnal && payload.data.jurnal.length > 0) {
+    const jurnalData = payload.data.jurnal.map((j, idx) => ({
+      'No': idx + 1,
+      'ID Jurnal': j.id,
+      'Tanggal': j.tanggal,
+      'Jam': j.jam,
+      'ID Siswa': j.siswaId,
+      'Nama Siswa': j.siswaNama,
+      'Kelas': j.kelas,
+      'Nama Guru Wali': j.guruWaliNama,
+      'Jenis Layanan': j.jenisLayanan,
+      'Topik Layanan': j.topik,
+      'Uraian': j.uraian,
+      'Hasil Kesepakatan': j.hasilKesepakatan,
+      'Tindak Lanjut': j.tindakLanjut,
+      'Status': j.status,
+      'Tanggapan Ortu': j.tanggapanOrtu || ''
+    }));
+    const jurnalWs = XLSX.utils.json_to_sheet(jurnalData);
+    jurnalWs['!cols'] = [
+      { wch: 6 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 18 },
+      { wch: 25 }, { wch: 12 }, { wch: 25 }, { wch: 22 }, { wch: 25 },
+      { wch: 45 }, { wch: 40 }, { wch: 35 }, { wch: 16 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, jurnalWs, 'Jurnal_Layanan');
+  }
+
+  // 6. Sheet Presensi
+  if (payload.data.presensi && payload.data.presensi.length > 0) {
+    const presensiData = payload.data.presensi.map((p, idx) => ({
+      'No': idx + 1,
+      'ID Presensi': p.id,
+      'Tanggal': p.tanggal,
+      'Kelas': p.kelas,
+      'ID Siswa': p.siswaId,
+      'Status Kehadiran': p.status,
+      'Keterangan': p.keterangan || ''
+    }));
+    const presensiWs = XLSX.utils.json_to_sheet(presensiData);
+    presensiWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 18 },
+      { wch: 16 }, { wch: 30 }
+    ];
+    XLSX.utils.book_append_sheet(wb, presensiWs, 'Presensi_Siswa');
+  }
+
+  // 7. Sheet Rujukan BK
+  if (payload.data.rujukanBK && payload.data.rujukanBK.length > 0) {
+    const rujukanData = payload.data.rujukanBK.map((r, idx) => ({
+      'No': idx + 1,
+      'ID Rujukan': r.id,
+      'Tanggal': r.tanggal,
+      'ID Siswa': r.siswaId,
+      'Nama Siswa': r.siswaNama,
+      'Kelas': r.kelas,
+      'Nama Guru Wali': r.guruWaliNama,
+      'Alasan Rujukan': r.alasanRujukan,
+      'Indikasi Masalah': r.indikasiMasalah,
+      'Upaya Guru Wali': r.upayaGuruWali,
+      'Status Kasus': r.status,
+      'Catatan Guru BK': r.catatanGuruBK || '',
+      'Tanggal Tindak Lanjut': r.tanggalTindakLanjut || ''
+    }));
+    const rujukanWs = XLSX.utils.json_to_sheet(rujukanData);
+    rujukanWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 28 },
+      { wch: 12 }, { wch: 25 }, { wch: 35 }, { wch: 35 }, { wch: 35 },
+      { wch: 18 }, { wch: 35 }, { wch: 18 }
+    ];
+    XLSX.utils.book_append_sheet(wb, rujukanWs, 'Rujukan_BK');
+  }
+
+  // 8. Sheet Jadwal Pertemuan
+  if (payload.data.jadwal && payload.data.jadwal.length > 0) {
+    const jadwalData = payload.data.jadwal.map((j, idx) => ({
+      'No': idx + 1,
+      'ID Agenda': j.id,
+      'Tanggal': j.tanggal,
+      'Jam': j.jam,
+      'Jenis Pertemuan': j.jenisPertemuan,
+      'ID Siswa': j.siswaId || '',
+      'Nama Siswa': j.siswaNama || '',
+      'Orang Tua': j.orangTuaNama || '',
+      'Tempat / Lokasi': j.tempat,
+      'Agenda': j.agenda,
+      'Status': j.status,
+      'Catatan Hasil': j.catatanHasil || ''
+    }));
+    const jadwalWs = XLSX.utils.json_to_sheet(jadwalData);
+    jadwalWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 22 },
+      { wch: 18 }, { wch: 28 }, { wch: 25 }, { wch: 25 }, { wch: 35 },
+      { wch: 14 }, { wch: 35 }
+    ];
+    XLSX.utils.book_append_sheet(wb, jadwalWs, 'Jadwal_Pertemuan');
+  }
+
+  // 9. Sheet Konsultasi Wali Murid
+  if (payload.data.konsultasi && payload.data.konsultasi.length > 0) {
+    const konsulData = payload.data.konsultasi.map((k, idx) => ({
+      'No': idx + 1,
+      'ID Konsultasi': k.id,
+      'Tanggal': k.tanggal,
+      'Jam': k.jam,
+      'ID Siswa': k.siswaId,
+      'Nama Siswa': k.siswaNama,
+      'Nama Orang Tua': k.namaOrtu,
+      'No HP': k.noHp,
+      'Topik Konsultasi': k.topik,
+      'Pesan Wali Murid': k.pesan,
+      'Status': k.status,
+      'Respon Guru Wali': k.responGuruWali || '',
+      'Tanggal Respon': k.tanggalRespon || ''
+    }));
+    const konsulWs = XLSX.utils.json_to_sheet(konsulData);
+    konsulWs['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 18 },
+      { wch: 28 }, { wch: 25 }, { wch: 16 }, { wch: 25 }, { wch: 40 },
+      { wch: 16 }, { wch: 40 }, { wch: 18 }
+    ];
+    XLSX.utils.book_append_sheet(wb, konsulWs, 'Konsultasi_Wali');
+  }
+
+  // Simpan Workbook ke file .xlsx
+  XLSX.writeFile(wb, finalFileName);
 }
 

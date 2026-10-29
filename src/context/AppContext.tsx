@@ -10,7 +10,8 @@ import {
   UserRole,
   PresensiStatus,
   UserAccount,
-  GoogleSheetsConfig
+  GoogleSheetsConfig,
+  SiguwaBackupPayload
 } from '../types';
 import {
   INITIAL_GURU_WALI,
@@ -105,6 +106,10 @@ interface AppContextType {
 
   addKonsultasiWaliMurid: (konsul: Omit<KonsultasiWaliMurid, 'id' | 'status'>) => void;
   respondKonsultasi: (id: string, respon: string) => void;
+
+  // Modul Backup & Pemulihan Cadangan Sistem
+  createBackupData: () => SiguwaBackupPayload;
+  restoreBackupData: (payload: SiguwaBackupPayload, mode?: 'replace' | 'merge') => Promise<{ success: boolean; message: string; counts?: any }>;
 
   resetToDefaultData: () => void;
 }
@@ -1799,6 +1804,253 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerAutoPushIfEnabled();
   };
 
+  const createBackupData = useCallback((): SiguwaBackupPayload => {
+    const current = dataRef.current;
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }) + ', ' + now.toLocaleTimeString('id-ID') + ' WIB';
+
+    return {
+      version: 'siguwa_backup_v1',
+      appName: 'SIGUWA SMKN 1 JEMBER',
+      sekolah: 'SMK Negeri 1 Jember',
+      exportDate: now.toISOString(),
+      exportDateFormatted: formattedDate,
+      counts: {
+        siswa: current.siswa.length,
+        guruWali: current.guruWali.length,
+        akun: current.akun.length,
+        jurnal: current.jurnal.length,
+        presensi: current.presensi.length,
+        rujukanBK: current.rujukanBK.length,
+        jadwal: current.jadwal.length,
+        konsultasi: konsultasiList.length
+      },
+      data: {
+        siswa: current.siswa,
+        guruWali: current.guruWali,
+        akun: current.akun,
+        jurnal: current.jurnal,
+        presensi: current.presensi,
+        rujukanBK: current.rujukanBK,
+        jadwal: current.jadwal,
+        konsultasi: konsultasiList,
+        googleSheetsConfig: {
+          appsScriptUrl: googleSheetsConfig.appsScriptUrl,
+          autoSync: googleSheetsConfig.autoSync,
+          syncIntervalSeconds: googleSheetsConfig.syncIntervalSeconds
+        }
+      }
+    };
+  }, [googleSheetsConfig, konsultasiList]);
+
+  const restoreBackupData = async (
+    payload: SiguwaBackupPayload,
+    mode: 'replace' | 'merge' = 'replace'
+  ): Promise<{ success: boolean; message: string; counts?: any }> => {
+    try {
+      if (!payload || !payload.data) {
+        return { success: false, message: 'Format berkas cadangan tidak valid atau rusak.' };
+      }
+
+      const backupData = payload.data;
+
+      if (mode === 'replace') {
+        // 1. Pulihkan Siswa
+        const restoredSiswa = Array.isArray(backupData.siswa) ? backupData.siswa : [];
+        setSiswaList(restoredSiswa);
+        localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(restoredSiswa));
+        if (restoredSiswa.length === 0) {
+          localStorage.setItem(STORAGE_KEYS.SISWA_CLEARED_FLAG, 'true');
+        } else {
+          localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+          const deleted = getDeletedSiswaIds();
+          restoredSiswa.forEach(s => {
+            if (s.id) deleted.delete(s.id);
+            if (s.nisn) deleted.delete(s.nisn);
+          });
+          saveDeletedSiswaIds(deleted);
+        }
+
+        // 2. Pulihkan Guru Wali
+        const restoredGuru = Array.isArray(backupData.guruWali) ? backupData.guruWali : [];
+        setGuruWaliList(restoredGuru);
+        localStorage.setItem(STORAGE_KEYS.GURU_LIST, JSON.stringify(restoredGuru));
+
+        // 3. Pulihkan Akun
+        const restoredAkun = Array.isArray(backupData.akun) ? deduplicateAccounts(backupData.akun) : [];
+        setAkunList(restoredAkun);
+        localStorage.setItem(STORAGE_KEYS.AKUN, JSON.stringify(restoredAkun));
+
+        // 4. Pulihkan Jurnal
+        const restoredJurnal = Array.isArray(backupData.jurnal) ? backupData.jurnal : [];
+        setJurnalList(restoredJurnal);
+        localStorage.setItem(STORAGE_KEYS.JURNAL, JSON.stringify(restoredJurnal));
+
+        // 5. Pulihkan Presensi
+        const restoredPresensi = Array.isArray(backupData.presensi) ? backupData.presensi : [];
+        setPresensiList(restoredPresensi);
+        localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(restoredPresensi));
+
+        // 6. Pulihkan Rujukan BK
+        const restoredRujukan = Array.isArray(backupData.rujukanBK) ? backupData.rujukanBK : [];
+        setRujukanBKList(restoredRujukan);
+        localStorage.setItem(STORAGE_KEYS.RUJUKAN, JSON.stringify(restoredRujukan));
+
+        // 7. Pulihkan Jadwal
+        const restoredJadwal = Array.isArray(backupData.jadwal) ? backupData.jadwal : [];
+        setJadwalList(restoredJadwal);
+        localStorage.setItem(STORAGE_KEYS.JADWAL, JSON.stringify(restoredJadwal));
+
+        // 8. Pulihkan Konsultasi
+        const restoredKonsul = Array.isArray(backupData.konsultasi) ? backupData.konsultasi : [];
+        setKonsultasiList(restoredKonsul);
+        localStorage.setItem(STORAGE_KEYS.KONSULTASI, JSON.stringify(restoredKonsul));
+
+        // Update dataRef
+        dataRef.current = {
+          siswa: restoredSiswa,
+          guruWali: restoredGuru,
+          akun: restoredAkun,
+          jurnal: restoredJurnal,
+          presensi: restoredPresensi,
+          rujukanBK: restoredRujukan,
+          jadwal: restoredJadwal
+        };
+
+        triggerAutoPushIfEnabled();
+
+        return {
+          success: true,
+          message: `Berhasil memulihkan ${restoredSiswa.length} data siswa, ${restoredGuru.length} pendidik, ${restoredAkun.length} akun, ${restoredJurnal.length} jurnal, dan ${restoredPresensi.length} presensi (Mode Ganti Total).`,
+          counts: {
+            siswa: restoredSiswa.length,
+            guru: restoredGuru.length,
+            akun: restoredAkun.length,
+            jurnal: restoredJurnal.length,
+            presensi: restoredPresensi.length
+          }
+        };
+      } else {
+        // Mode 'merge' (Gabungkan data tanpa menghapus yang sudah ada)
+        // 1. Merge Siswa
+        const existingSiswa = dataRef.current.siswa || [];
+        const incomingSiswa = Array.isArray(backupData.siswa) ? backupData.siswa : [];
+        const siswaMap = new Map<string, Siswa>();
+        existingSiswa.forEach(s => siswaMap.set(s.nisn || s.id, s));
+        incomingSiswa.forEach(s => siswaMap.set(s.nisn || s.id, { ...siswaMap.get(s.nisn || s.id), ...s }));
+        const mergedSiswa = Array.from(siswaMap.values());
+        setSiswaList(mergedSiswa);
+        localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(mergedSiswa));
+        if (mergedSiswa.length > 0) {
+          localStorage.removeItem(STORAGE_KEYS.SISWA_CLEARED_FLAG);
+        }
+
+        // 2. Merge Guru
+        const existingGuru = dataRef.current.guruWali || [];
+        const incomingGuru = Array.isArray(backupData.guruWali) ? backupData.guruWali : [];
+        const guruMap = new Map<string, GuruWali>();
+        existingGuru.forEach(g => guruMap.set(g.nip || g.id, g));
+        incomingGuru.forEach(g => guruMap.set(g.nip || g.id, { ...guruMap.get(g.nip || g.id), ...g }));
+        const mergedGuru = Array.from(guruMap.values());
+        setGuruWaliList(mergedGuru);
+        localStorage.setItem(STORAGE_KEYS.GURU_LIST, JSON.stringify(mergedGuru));
+
+        // 3. Merge Akun
+        const existingAkun = dataRef.current.akun || [];
+        const incomingAkun = Array.isArray(backupData.akun) ? backupData.akun : [];
+        const akunMap = new Map<string, UserAccount>();
+        existingAkun.forEach(a => akunMap.set(a.username || a.id, a));
+        incomingAkun.forEach(a => akunMap.set(a.username || a.id, { ...akunMap.get(a.username || a.id), ...a }));
+        const mergedAkun = deduplicateAccounts(Array.from(akunMap.values()));
+        setAkunList(mergedAkun);
+        localStorage.setItem(STORAGE_KEYS.AKUN, JSON.stringify(mergedAkun));
+
+        // 4. Merge Jurnal
+        const existingJurnal = dataRef.current.jurnal || [];
+        const incomingJurnal = Array.isArray(backupData.jurnal) ? backupData.jurnal : [];
+        const jurnalMap = new Map<string, JurnalLayanan>();
+        existingJurnal.forEach(j => jurnalMap.set(j.id, j));
+        incomingJurnal.forEach(j => jurnalMap.set(j.id, j));
+        const mergedJurnal = Array.from(jurnalMap.values());
+        setJurnalList(mergedJurnal);
+        localStorage.setItem(STORAGE_KEYS.JURNAL, JSON.stringify(mergedJurnal));
+
+        // 5. Merge Presensi
+        const existingPresensi = dataRef.current.presensi || [];
+        const incomingPresensi = Array.isArray(backupData.presensi) ? backupData.presensi : [];
+        const presensiMap = new Map<string, PresensiRecord>();
+        existingPresensi.forEach(p => presensiMap.set(p.id || `${p.tanggal}_${p.kelas}`, p));
+        incomingPresensi.forEach(p => presensiMap.set(p.id || `${p.tanggal}_${p.kelas}`, p));
+        const mergedPresensi = Array.from(presensiMap.values());
+        setPresensiList(mergedPresensi);
+        localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(mergedPresensi));
+
+        // 6. Merge Rujukan BK
+        const existingRujukan = dataRef.current.rujukanBK || [];
+        const incomingRujukan = Array.isArray(backupData.rujukanBK) ? backupData.rujukanBK : [];
+        const rujukanMap = new Map<string, RujukanBK>();
+        existingRujukan.forEach(r => rujukanMap.set(r.id, r));
+        incomingRujukan.forEach(r => rujukanMap.set(r.id, r));
+        const mergedRujukan = Array.from(rujukanMap.values());
+        setRujukanBKList(mergedRujukan);
+        localStorage.setItem(STORAGE_KEYS.RUJUKAN, JSON.stringify(mergedRujukan));
+
+        // 7. Merge Jadwal
+        const existingJadwal = dataRef.current.jadwal || [];
+        const incomingJadwal = Array.isArray(backupData.jadwal) ? backupData.jadwal : [];
+        const jadwalMap = new Map<string, JadwalPertemuan>();
+        existingJadwal.forEach(j => jadwalMap.set(j.id, j));
+        incomingJadwal.forEach(j => jadwalMap.set(j.id, j));
+        const mergedJadwal = Array.from(jadwalMap.values());
+        setJadwalList(mergedJadwal);
+        localStorage.setItem(STORAGE_KEYS.JADWAL, JSON.stringify(mergedJadwal));
+
+        // 8. Merge Konsultasi
+        const existingKonsul = konsultasiList || [];
+        const incomingKonsul = Array.isArray(backupData.konsultasi) ? backupData.konsultasi : [];
+        const konsulMap = new Map<string, KonsultasiWaliMurid>();
+        existingKonsul.forEach(k => konsulMap.set(k.id, k));
+        incomingKonsul.forEach(k => konsulMap.set(k.id, k));
+        const mergedKonsul = Array.from(konsulMap.values());
+        setKonsultasiList(mergedKonsul);
+        localStorage.setItem(STORAGE_KEYS.KONSULTASI, JSON.stringify(mergedKonsul));
+
+        // Update dataRef
+        dataRef.current = {
+          siswa: mergedSiswa,
+          guruWali: mergedGuru,
+          akun: mergedAkun,
+          jurnal: mergedJurnal,
+          presensi: mergedPresensi,
+          rujukanBK: mergedRujukan,
+          jadwal: mergedJadwal
+        };
+
+        triggerAutoPushIfEnabled();
+
+        return {
+          success: true,
+          message: `Berhasil menggabungkan data cadangan (${mergedSiswa.length} total siswa, ${mergedGuru.length} pendidik, ${mergedAkun.length} akun). Data lokal tetap aman.`,
+          counts: {
+            siswa: mergedSiswa.length,
+            guru: mergedGuru.length,
+            akun: mergedAkun.length,
+            jurnal: mergedJurnal.length,
+            presensi: mergedPresensi.length
+          }
+        };
+      }
+    } catch (err: any) {
+      console.error('Error saat restore backup:', err);
+      return { success: false, message: 'Gagal memulihkan cadangan: ' + (err.message || 'Terjadi kesalahan') };
+    }
+  };
+
   const resetToDefaultData = () => {
     setSiswaList(INITIAL_SISWA);
     setGuruWaliList(INITIAL_GURU_WALI);
@@ -1870,6 +2122,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteJadwal,
         addKonsultasiWaliMurid,
         respondKonsultasi,
+        createBackupData,
+        restoreBackupData,
         resetToDefaultData
       }}
     >

@@ -142,3 +142,32 @@ export interface GoogleSheetsConfig {
   syncStatus: 'connected' | 'disconnected' | 'syncing' | 'error';
   syncMessage?: string;
 }
+
+export interface SiguwaBackupPayload {
+  version: string;
+  appName: string;
+  sekolah: string;
+  exportDate: string;
+  exportDateFormatted: string;
+  counts: {
+    siswa: number;
+    guruWali: number;
+    akun: number;
+    jurnal: number;
+    presensi: number;
+    rujukanBK: number;
+    jadwal: number;
+    konsultasi: number;
+  };
+  data: {
+    siswa: Siswa[];
+    guruWali: GuruWali[];
+    akun: UserAccount[];
+    jurnal: JurnalLayanan[];
+    presensi: PresensiRecord[];
+    rujukanBK: RujukanBK[];
+    jadwal: JadwalPertemuan[];
+    konsultasi: KonsultasiWaliMurid[];
+    googleSheetsConfig?: Partial<GoogleSheetsConfig>;
+  };
+}
